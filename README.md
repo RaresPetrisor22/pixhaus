@@ -72,16 +72,9 @@ download multi-gigabyte galleries.
 - [ ] M4 — Bulk zip
 - [ ] M5 — Favorites and selections
 
-## Non-goals
+## After mvp goals
 
 Payments and print sales, custom domains, face detection, mobile apps. Aperture delivers photos to
 clients. That's the whole scope.
 
-## Contributing
 
-Issues and PRs welcome. If you're a photographer using this, bug reports about real workflows are worth
-more than code.
-
-## License
-
-[AGPL-3.0](LICENSE)
