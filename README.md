@@ -74,7 +74,4 @@ download multi-gigabyte galleries.
 
 ## After mvp goals
 
-Payments and print sales, custom domains, face detection, mobile apps. Aperture delivers photos to
-clients. That's the whole scope.
-
-
+Payments and print sales, custom domains, watermarks, face detection, mobile apps, etc.

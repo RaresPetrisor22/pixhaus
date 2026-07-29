@@ -1,0 +1,12 @@
+# Normalise line endings to LF in the repository.
+#
+# This matters on Windows: a shell script committed with CRLF endings fails
+# inside a Linux container with a confusing "bad interpreter" error, because
+# the kernel reads the trailing \r as part of the interpreter path.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary

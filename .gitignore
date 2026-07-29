@@ -1,1 +1,24 @@
-project.md
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Test output
+coverage/
+
+# Environment — .env.example is the tracked template, .env is yours
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# Local scratch notes, deliberately not in the repo
+/docs/CLAUDE.md

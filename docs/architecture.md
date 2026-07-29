@@ -5,8 +5,8 @@ link, and the client opens it without an account and either downloads their phot
 
 ## Core design decisions
 
-1. **One gallery model, not two.** A gallery is *a set of assets plus a grant of specific rights to a
-   specific audience for a window*. Delivery is `{view, download}`; proofing is `{view, favorite}`.
+1. **One gallery model, not two.** A gallery is _a set of assets plus a grant of specific rights to a
+   specific audience for a window_. Delivery is `{view, download}`; proofing is `{view, favorite}`.
    Same table, same access path, different rights mask.
 2. **Two auth planes.** Photographers have accounts. Clients do not — they hold capability grants.
    These need fundamentally different machinery.
@@ -146,7 +146,7 @@ Two things worth defending in an interview:
 
 - **`studio_id` is denormalized onto `assets` and `grants`** even though it's reachable via the gallery.
   This lets tenant scoping be a single predicate on every query rather than a join you can forget. Pair it
-  with a base repository that *requires* tenant context — make the mistake structurally impossible, not a
+  with a base repository that _requires_ tenant context — make the mistake structurally impossible, not a
   matter of discipline.
 - **`favorites` hangs off `grant_id`, not a user.** There is no client user to attach it to. This falls
   directly out of the no-accounts decision, and it's the moment the design stops being a normal CRUD app.
@@ -242,7 +242,7 @@ sequenceDiagram
 ```
 
 This is the part of the system worth talking about. The tension: capability tokens want to be
-stateless (fast, no DB hit per thumbnail) *and* instantly revocable (the photographer clicks "revoke"
+stateless (fast, no DB hit per thumbnail) _and_ instantly revocable (the photographer clicks "revoke"
 and it means something). Pure JWTs can't be revoked; pure DB lookups cost a query per thumbnail, and a
 500-photo gallery is 500 thumbnails.
 
@@ -285,15 +285,15 @@ accumulate rows pointing at objects that may or may not exist, and you pay to st
 
 ## Threat model
 
-| Threat | Mitigation |
-|---|---|
+| Threat                                | Mitigation                                                                                                   |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | Upload URL abused as a free file host | Key prefix + `content-length-range` + short expiry; server-side magic-byte and size verification at finalize |
-| Client shares gallery link publicly | Grants expire; email-gated magic link; revocation epoch; per-grant rate limits on mint |
-| Guessing another gallery's assets | Presigned URLs minted only after `authorize()`; asset IDs are UUIDs; tenant predicate on every query |
-| Revoked client keeps their token | Short token TTL bounds the window; Redis denylist for immediate kill |
-| Cross-tenant data leak | `studio_id` on every row; base repository requires tenant context |
-| Stolen preview reveals location | EXIF stripped from all derivatives; originals retain it |
-| Worker retry duplicates work | Idempotency key = content hash + rendition spec |
+| Client shares gallery link publicly   | Grants expire; email-gated magic link; revocation epoch; per-grant rate limits on mint                       |
+| Guessing another gallery's assets     | Presigned URLs minted only after `authorize()`; asset IDs are UUIDs; tenant predicate on every query         |
+| Revoked client keeps their token      | Short token TTL bounds the window; Redis denylist for immediate kill                                         |
+| Cross-tenant data leak                | `studio_id` on every row; base repository requires tenant context                                            |
+| Stolen preview reveals location       | EXIF stripped from all derivatives; originals retain it                                                      |
+| Worker retry duplicates work          | Idempotency key = content hash + rendition spec                                                              |
 
 ## Not built (deliberately)
 
