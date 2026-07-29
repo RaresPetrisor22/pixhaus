@@ -14,7 +14,7 @@ services:
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
 
     ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
 
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -32,20 +32,82 @@ services:
 
     restart: unless-stopped
 
-    command: ['redis-server', '--appendonly', 'yes']
+    command:
+      ['redis-server', '--appendonly', 'yes', '--requirepass', '${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}']
 
     ports:
-      - '${REDIS_PORT:-6379}:6379'
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
 
     volumes:
       - redis-data:/data
 
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', '--no-auth-warning', 'ping']
       interval: 5s
       timeout: 3s
       retries: 12
 
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+
+    restart: unless-stopped
+
+    command: ['server', '/data', '--console-address', ':9001']
+
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:?set STORAGE_ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:?set STORAGE_SECRET_KEY in .env}
+
+    ports:
+      - '127.0.0.1:${MINIO_PORT:-9000}:9000'
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
+
+    volumes:
+      - minio-data:/data
+
+    healthcheck:
+      # The minio/minio image ships no shell utilities (no curl, wget, or mc) —
+      # only bash and coreutils. This hits MinIO's own /minio/health/live
+      # endpoint using bash's built-in /dev/tcp, verified against a live
+      # container before being wired in here.
+      test:
+        [
+          'CMD',
+          'bash',
+          '-c',
+          'exec 3<>/dev/tcp/127.0.0.1/9000; printf "GET /minio/health/live HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n" >&3; read -r line <&3; [[ "$$line" == *200* ]]',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # One-shot: creates the bucket and locks it to private, then exits 0.
+  minio-init:
+    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+
+    depends_on:
+      minio:
+        condition: service_healthy
+
+    environment:
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:?set STORAGE_ENDPOINT in .env}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:?set STORAGE_BUCKET in .env}
+
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -eu
+        mc alias set local "$$STORAGE_ENDPOINT" "$$STORAGE_ACCESS_KEY" "$$STORAGE_SECRET_KEY"
+        mc mb --ignore-existing "local/$$STORAGE_BUCKET"
+        mc anonymous set none "local/$$STORAGE_BUCKET"
+        echo "bucket $$STORAGE_BUCKET ready (private)"
+
+    restart: 'no'
+
 volumes:
   postgres-data:
   redis-data:
+  minio-data:

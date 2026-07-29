@@ -53,8 +53,10 @@ Open http://localhost:3000. This starts the API, worker, Postgres, Redis, MinIO 
 | Variable                                    | Description                                                         |
 | ------------------------------------------- | ------------------------------------------------------------------- |
 | `STORAGE_ENDPOINT`                          | S3-compatible endpoint (MinIO, Cloudflare R2, Backblaze B2, Wasabi) |
+| `STORAGE_REGION`                            | Region string the SDK requires — value is provider-specific         |
 | `STORAGE_BUCKET`                            | Bucket name                                                         |
 | `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | Bucket credentials — scope them to this bucket only                 |
+| `STORAGE_FORCE_PATH_STYLE`                  | `true` for MinIO; provider-dependent otherwise                      |
 | `DATABASE_URL`                              | Postgres connection string                                          |
 | `REDIS_URL`                                 | Redis connection string                                             |
 | `SMTP_URL`                                  | For magic links                                                     |
