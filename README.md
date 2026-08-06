@@ -34,19 +34,28 @@ A few decisions worth knowing before you read the code:
   bucket → browser. The API mints URLs and verifies objects server-side after upload. This is why it's
   cheap to run.
 
-Full write-up with diagrams and a threat model: [`docs/architecture.md`](docs/architecture.md).
+Documentation:
+
+- [`docs/architecture.md`](docs/architecture.md) — diagrams, data model, threat model
+- [`docs/api.md`](docs/api.md) — every route, method, and auth requirement
+- [`docs/adr/`](docs/adr/) — why the load-bearing decisions were made
 
 ## Quick start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/aperture
-cd aperture
+git clone https://github.com/YOUR_USERNAME/pixhaus
+cd pixhaus
 cp .env.example .env
-docker compose up
+docker compose up -d --wait
+pnpm install
+pnpm db:migrate
 ```
 
-Open http://localhost:3000. This starts the API, worker, Postgres, Redis, MinIO (local S3), and Mailpit
-(catches outgoing email at http://localhost:8025) — no external accounts needed to try it.
+This starts Postgres, Redis, MinIO (local S3), and Mailpit (catches outgoing email at
+http://localhost:8025) — no external accounts needed to try it. `pnpm db:migrate` applies the
+database schema.
+
+The API, worker, and frontend are not built yet — see the [roadmap](#roadmap).
 
 ## Configuration
 

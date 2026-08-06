@@ -19,6 +19,7 @@ coverage/
 Thumbs.db
 .idea/
 *.swp
+.vscode
 
 # Local scratch notes, deliberately not in the repo
 /docs/CLAUDE.md
