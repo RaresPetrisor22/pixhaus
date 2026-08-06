@@ -33,7 +33,13 @@ services:
     restart: unless-stopped
 
     command:
-      ['redis-server', '--appendonly', 'yes', '--requirepass', '${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}']
+      [
+        'redis-server',
+        '--appendonly',
+        'yes',
+        '--requirepass',
+        '${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}',
+      ]
 
     ports:
       - '127.0.0.1:${REDIS_PORT:-6379}:6379'

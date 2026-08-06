@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch cancels the older run — no point finishing a
+# check on code that has already been replaced.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Format, lint, typecheck, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4 # version comes from packageManager in package.json
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24 # native TypeScript stripping, so nothing needs building
+          cache: pnpm
+
+      # --frozen-lockfile fails if pnpm-lock.yaml disagrees with the manifests,
+      # so a dependency added without committing the lockfile cannot pass CI.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  migrate:
+    name: Migrations apply to an empty database
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Deliberately the same path a new contributor takes, rather than a
+      # `services:` container. This exercises docker-compose.yml and the role
+      # bootstrap in docker/postgres/init/ too — not just the SQL.
+      - name: Start Postgres
+        run: |
+          cp .env.example .env
+          docker compose up -d --wait postgres
+
+      - name: Apply migrations
+        run: pnpm db:migrate
+
+      - name: Second run must be a no-op
+        # If applying twice is not safe, every deploy that runs migrations more
+        # than once is a live incident waiting to happen.
+        run: |
+          pnpm db:migrate | tee second-run.log
+          grep -q 'nothing to do' second-run.log
+
+      - run: pnpm db:status
+
+      # The schema is only correct if the tenant wall came up with it. Eight
+      # tables, every one with row-level security enabled.
+      - name: Verify RLS is enabled on all eight tables
+        run: |
+          docker compose exec -T postgres \
+            psql -v ON_ERROR_STOP=1 -U pixhaus_owner -d pixhaus -c "
+              DO \$\$
+              DECLARE
+                total int;
+                secured int;
+              BEGIN
+                SELECT count(*), count(*) FILTER (WHERE rowsecurity)
+                  INTO total, secured
+                  FROM pg_tables
+                 WHERE schemaname = 'public'
+                   AND tablename <> 'schema_migrations';
+
+                IF total <> 8 THEN
+                  RAISE EXCEPTION 'expected 8 tables, found %', total;
+                END IF;
+                IF secured <> 8 THEN
+                  RAISE EXCEPTION 'only % of % tables have RLS enabled', secured, total;
+                END IF;
+              END
+              \$\$;"
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose logs postgres

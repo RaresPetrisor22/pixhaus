@@ -7,7 +7,13 @@
     "types": ["node"],
     "noEmit": true,
 
-    // Node 22.18+/24 strips types at run time instead of compiling. These two
+    // Node runs these files directly, so imports must name the real file on
+    // disk -- `./migrations.ts`, not `./migrations.js`. tsc rejects that by
+    // default because normally it would be emitting the .js you should point
+    // at; with noEmit there is no such file, so pointing at the .ts is correct.
+    "allowImportingTsExtensions": true,
+
+    // Node 22.18+/24 strips types at run time instead of compiling. These
     // keep us inside the subset it can strip: no enums, no namespaces, no
     // parameter properties, and every type-only import spelled `import type`.
     "erasableSyntaxOnly": true,

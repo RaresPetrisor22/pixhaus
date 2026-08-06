@@ -29,25 +29,34 @@
  * statements Postgres refuses to run in one -- `CREATE INDEX CONCURRENTLY`,
  * `CREATE DATABASE`, `ALTER TYPE ... ADD VALUE` on older servers. If you ever
  * need one, it gets its own file and this runner needs a per-file opt-out flag.
+ *
+ * The filesystem and history-comparison logic lives in migrations.ts, which
+ * needs no database and is unit tested.
  */
 
-import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import pg from 'pg';
 
+import {
+  assertNoBackfill,
+  assertNoDrift,
+  loadMigrations,
+  type AppliedMigration,
+} from './migrations.ts';
+
 const { Client } = pg;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS_DIR = join(HERE, '..', 'migrations');
 const REPO_ROOT = join(HERE, '..', '..', '..');
 
-/** `0001_initial_schema.sql` -> version `0001`, name `initial_schema`. */
-const FILENAME_PATTERN = /^(\d{4})_([a-z0-9_]+)\.sql$/;
-
+/**
+ * Any fixed 64-bit integer works. It only has to be identical in every process
+ * that migrates this database, so it lives here as a constant rather than
+ * being derived from anything.
+ */
 const ADVISORY_LOCK_KEY = 4073218001;
 
 const REGISTRY_DDL = `
@@ -60,21 +69,11 @@ const REGISTRY_DDL = `
   )
 `;
 
-type Migration = {
-  version: string;
-  name: string;
-  filename: string;
-  sql: string;
-  checksum: string;
-};
-
-type AppliedMigration = {
-  version: string;
-  name: string;
-  checksum: string;
-  applied_at: Date;
-};
-
+/**
+ * Loads `.env` from the repo root if it is there. In CI there is no file and
+ * the variables come from the environment already, which is why a missing
+ * `.env` is not an error.
+ */
 function loadEnv(): void {
   const envFile = join(REPO_ROOT, '.env');
   if (existsSync(envFile)) {
@@ -82,93 +81,11 @@ function loadEnv(): void {
   }
 }
 
-async function loadMigrations(): Promise<Migration[]> {
-  if (!existsSync(MIGRATIONS_DIR)) {
-    throw new Error(`no migrations directory at ${MIGRATIONS_DIR}`);
-  }
-
-  const filenames = (await readdir(MIGRATIONS_DIR)).filter((f) => f.endsWith('.sql')).sort();
-  const versionOwner = new Map<string, string>();
-  const migrations: Migration[] = [];
-
-  for (const filename of filenames) {
-    const match = FILENAME_PATTERN.exec(filename);
-    if (!match) {
-      throw new Error(`migration "${filename}" must be named like 0001_snake_case_name.sql`);
-    }
-
-    const version = match[1];
-    const name = match[2];
-
-    const duplicate = versionOwner.get(version);
-    if (duplicate !== undefined) {
-      throw new Error(`version ${version} is claimed by both ${duplicate} and ${filename}`);
-    }
-    versionOwner.set(version, filename);
-
-    const sql = await readFile(join(MIGRATIONS_DIR, filename), 'utf8');
-    migrations.push({
-      version,
-      name,
-      filename,
-      sql,
-      checksum: createHash('sha256').update(sql).digest('hex'),
-    });
-  }
-
-  return migrations;
-}
-
 async function fetchApplied(client: pg.Client): Promise<Map<string, AppliedMigration>> {
   const { rows } = await client.query<AppliedMigration>(
     'SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version',
   );
   return new Map(rows.map((row) => [row.version, row]));
-}
-
-/**
- * Refuses to continue if the repo and the database disagree about history:
- * a recorded migration whose file has been deleted, or whose contents have
- * changed since it ran.
- */
-function assertNoDrift(migrations: Migration[], applied: Map<string, AppliedMigration>): void {
-  const byVersion = new Map(migrations.map((m) => [m.version, m]));
-
-  for (const row of applied.values()) {
-    const migration = byVersion.get(row.version);
-    if (!migration) {
-      throw new Error(
-        `${row.version}_${row.name} is recorded as applied but its file no longer exists — ` +
-          `restore it, or remove the row if the database was rebuilt from elsewhere`,
-      );
-    }
-    if (migration.checksum !== row.checksum) {
-      throw new Error(
-        `${migration.filename} has changed since it was applied on ` +
-          `${row.applied_at.toISOString()} — write a new migration instead of editing this one`,
-      );
-    }
-  }
-}
-
-/**
- * Refuses to apply a migration that sorts before one already applied. This
- * happens when two branches both add 000N and one merges after the other has
- * already run; applying them out of order gives two databases different
- * schemas from the same files. Renumber the newcomer.
- */
-function assertNoBackfill(migrations: Migration[], applied: Map<string, AppliedMigration>): void {
-  const highestApplied = [...applied.keys()].sort().at(-1);
-  if (highestApplied === undefined) return;
-
-  for (const migration of migrations) {
-    if (!applied.has(migration.version) && migration.version < highestApplied) {
-      throw new Error(
-        `${migration.filename} is pending but ${highestApplied} has already been applied — ` +
-          `renumber it to sort after ${highestApplied}`,
-      );
-    }
-  }
 }
 
 async function up(client: pg.Client): Promise<void> {
