@@ -49,13 +49,21 @@ cp .env.example .env
 docker compose up -d --wait
 pnpm install
 pnpm db:migrate
+pnpm build && pnpm api
 ```
 
 This starts Postgres, Redis, MinIO (local S3), and Mailpit (catches outgoing email at
 http://localhost:8025) — no external accounts needed to try it. `pnpm db:migrate` applies the
-database schema.
+database schema, and `pnpm api` serves the API on http://localhost:3000.
 
-The API, worker, and frontend are not built yet — see the [roadmap](#roadmap).
+Two endpoints exist so far:
+
+| Endpoint   | Answers                                                                                    |
+| ---------- | ------------------------------------------------------------------------------------------ |
+| `/healthz` | Is the process alive? Checks nothing else, so a database blip cannot cause a restart loop. |
+| `/readyz`  | Should this instance receive traffic? Checks Postgres; returns `503` when it cannot.       |
+
+The worker and frontend are not built yet — see the [roadmap](#roadmap).
 
 ## Configuration
 

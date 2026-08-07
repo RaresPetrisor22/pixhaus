@@ -13,7 +13,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck",
+    "build": "pnpm -r build",
     "test": "pnpm -r test",
+    "api": "pnpm --filter @pixhaus/api start",
     "db:migrate": "pnpm --filter @pixhaus/db migrate",
     "db:status": "pnpm --filter @pixhaus/db migrate:status"
   },

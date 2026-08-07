@@ -33,6 +33,9 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
+      # typecheck is --noEmit; this proves the deployable artifact actually
+      # compiles, which is a different failure mode.
+      - run: pnpm build
       - run: pnpm test
 
   migrate:

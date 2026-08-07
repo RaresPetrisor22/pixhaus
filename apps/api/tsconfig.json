@@ -1,0 +1,29 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // CommonJS, unlike packages/db. NestJS's dependency injection reads
+    // decorator metadata at runtime, and that machinery is still happiest in
+    // CJS — ESM works but adds friction for no benefit here.
+    //
+    // `nodenext` picks the module format from the nearest package.json: this
+    // one has no `"type": "module"`, so these files compile to CommonJS. The
+    // older `"module": "commonjs"` + `"moduleResolution": "node"` pairing does
+    // the same thing but is deprecated in TypeScript 6.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2023"],
+    "types": ["node"],
+
+    // The two options NestJS cannot work without. `emitDecoratorMetadata` is
+    // what lets Nest see a constructor parameter's *type* at runtime and know
+    // what to inject. It is also exactly why this package needs a real build
+    // step: decorators and parameter properties are not erasable, so Node
+    // cannot strip-and-run these files the way it does packages/db.
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"]
+}
