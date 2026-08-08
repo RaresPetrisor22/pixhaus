@@ -99,6 +99,21 @@ jobs:
               END
               \$\$;"
 
+      # Everything above ran the migration runner from the host. This brings up
+      # the containerised stack instead, which is what a new contributor
+      # actually types — and is the only thing that exercises the Dockerfile,
+      # the one-shot migrate service, and the API's health check.
+      #
+      # `--wait` blocks until the api health check passes, so a container that
+      # boots but cannot reach Postgres fails the job rather than passing it.
+      - name: Containerised stack comes up healthy
+        run: docker compose up -d --wait api
+
+      - name: Probe the health endpoints
+        run: |
+          curl --fail --silent --show-error http://localhost:3000/healthz
+          curl --fail --silent --show-error http://localhost:3000/readyz
+
       - name: Show container logs on failure
         if: failure()
-        run: docker compose logs postgres
+        run: docker compose logs

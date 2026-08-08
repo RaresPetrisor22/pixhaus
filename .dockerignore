@@ -1,0 +1,24 @@
+# Everything here is either rebuilt inside the image, irrelevant to it, or a
+# secret that must never be baked into a layer.
+
+node_modules
+**/node_modules
+
+# Build output — the image compiles its own from source.
+dist
+**/dist
+*.tsbuildinfo
+
+.git
+.github
+coverage
+
+# Secrets. Compose passes configuration in as environment variables; a .env
+# copied into a layer would sit in the image history forever.
+.env
+.env.*
+!.env.example
+
+docs
+*.md
+!README.md

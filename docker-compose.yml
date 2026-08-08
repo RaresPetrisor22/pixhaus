@@ -125,6 +125,62 @@ services:
       - '127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025'
       - '127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025'
 
+  # Applies pending migrations, then exits 0. The api service waits
+  # for it to finish, so `docker compose up` always starts an API whose schema
+  # is current.
+  #
+  # It connects as the OWNER role. This is the only container that ever does —
+  # the owner creates the tables, which is what makes the app role subject to
+  # their row-level security policies.
+  migrate:
+    build:
+      context: .
+      target: migrate
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      # `postgres`, not `localhost`: inside the compose network a service is
+      # reachable by its own name. The .env values point at localhost because
+      # those are for running tooling from your shell.
+      MIGRATION_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+
+    restart: 'no'
+
+  api:
+    build:
+      context: .
+      target: api
+
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      # The APP role — owns nothing, so row-level security applies to it.
+      DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
+
+    ports:
+      - '127.0.0.1:${API_PORT:-3000}:3000'
+
+    healthcheck:
+      # /readyz, not /healthz: "healthy" here gates `--wait` and anything that
+      # declares depends_on this service, and what those callers care about is
+      # whether the API can actually serve — not merely that the process exists.
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://127.0.0.1:3000/readyz']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
 volumes:
   postgres-data:
   redis-data:

@@ -47,14 +47,14 @@ git clone https://github.com/YOUR_USERNAME/pixhaus
 cd pixhaus
 cp .env.example .env
 docker compose up -d --wait
-pnpm install
-pnpm db:migrate
-pnpm build && pnpm api
 ```
 
-This starts Postgres, Redis, MinIO (local S3), and Mailpit (catches outgoing email at
-http://localhost:8025) — no external accounts needed to try it. `pnpm db:migrate` applies the
-database schema, and `pnpm api` serves the API on http://localhost:3000.
+That is the whole thing — no Node install required. Compose starts Postgres, Redis, MinIO (local S3)
+and Mailpit (catches outgoing email at http://localhost:8025), applies the database migrations, and
+serves the API on http://localhost:3000. No external accounts needed to try it.
+
+`--wait` blocks until every service passes its health check, so when the command returns the stack is
+genuinely ready rather than merely started.
 
 Two endpoints exist so far:
 
@@ -62,6 +62,24 @@ Two endpoints exist so far:
 | ---------- | ------------------------------------------------------------------------------------------ |
 | `/healthz` | Is the process alive? Checks nothing else, so a database blip cannot cause a restart loop. |
 | `/readyz`  | Should this instance receive traffic? Checks Postgres; returns `503` when it cannot.       |
+
+### Working on the code
+
+Compose runs the API from a built image, so it will not pick up source edits. Either rebuild it:
+
+```bash
+docker compose up -d --build api
+```
+
+or run the API on the host against the compose services, which is faster to iterate on:
+
+```bash
+pnpm install
+pnpm db:migrate          # migrations from your shell, as the owner role
+pnpm build && pnpm api   # http://localhost:3000
+```
+
+Stop the containerised API first (`docker compose stop api`) or the two will fight over port 3000.
 
 The worker and frontend are not built yet — see the [roadmap](#roadmap).
 
@@ -84,7 +102,7 @@ download multi-gigabyte galleries.
 
 ## Roadmap
 
-- [ ] M0 — Scaffold, Docker Compose, CI
+- [x] M0 — Scaffold, Docker Compose, CI
 - [ ] M1 — Photographer accounts
 - [ ] M2 — Galleries and upload pipeline
 - [ ] M3 — Share links, client gallery, downloads
