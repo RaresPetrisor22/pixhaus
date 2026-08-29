@@ -13,7 +13,7 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
 
 	-- Every table the owner creates from here on -- i.e. every table any
 	-- migration ever adds -- is automatically readable and writable by the app
-	-- role, with no per-migration GRANT boilerplate to forget.
+	-- role;
 	--
 	-- A blanket DML grant is safe here because table privileges are not what
 	-- separates tenants; the row-level security policies in migration 0001 are.
@@ -23,6 +23,18 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
 	  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${APP_DB_USER};
 	ALTER DEFAULT PRIVILEGES FOR ROLE ${POSTGRES_USER} IN SCHEMA public
 	  GRANT USAGE, SELECT ON SEQUENCES TO ${APP_DB_USER};
+
+	-- The app role reaches four rows it cannot SELECT -- the ones that identify
+	-- a user before their tenant is known -- through SECURITY DEFINER functions
+	-- created in migration 0002. Postgres would grant EXECUTE on those to
+	-- PUBLIC, which is the wrong default for anything that bypasses row-level
+	-- security, so 0002 revokes PUBLIC. This line is what the app role keeps
+	-- instead: an explicit grant, applied as each function is created.
+	--
+	-- without it, 0002's REVOKE would leave the app role
+	-- with no way to log anyone in. 0002 refuses to apply if that happened.
+	ALTER DEFAULT PRIVILEGES FOR ROLE ${POSTGRES_USER} IN SCHEMA public
+	  GRANT EXECUTE ON ROUTINES TO ${APP_DB_USER};
 EOSQL
 
 echo "role ${APP_DB_USER} created (owns nothing, subject to RLS)"
