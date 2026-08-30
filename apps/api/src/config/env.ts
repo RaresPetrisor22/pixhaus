@@ -16,6 +16,16 @@ export const envSchema = z.object({
   // security, which is the entire point of the two-role setup — see
   // packages/db/migrations/0001_initial_schema.sql.
   DATABASE_URL: z.url(),
+
+  // Where the browser reaches this deployment. Verification and magic links
+  // are built from it, so it is the public origin, not the bind address.
+  APP_URL: z.url(),
+
+  SMTP_URL: z.url(),
+  SMTP_FROM: z.string().min(1).default('Pixhaus <no-reply@pixhaus.local>'),
+
+  SESSION_TTL_HOURS: z.coerce.number().int().positive().default(336),
+  EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().positive().default(24),
 });
 
 export type Env = z.infer<typeof envSchema>;

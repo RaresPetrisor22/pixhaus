@@ -15,6 +15,8 @@
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
     "@nestjs/terminus": "^11.1.1",
+    "@node-rs/argon2": "^2.2.0",
+    "nodemailer": "^9.0.6",
     "pg": "^8.22.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
@@ -22,6 +24,7 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
+    "@types/nodemailer": "^8.0.1",
     "@types/pg": "^8.20.0"
   }
 }

@@ -6,6 +6,7 @@ import { ConfigModule } from '@nestjs/config';
 import { validateEnv } from './config/env';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { HealthModule } from './health/health.module';
     }),
     DatabaseModule,
     HealthModule,
+    MailModule,
   ],
 })
 export class AppModule {}
