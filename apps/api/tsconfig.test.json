@@ -1,0 +1,9 @@
+{
+  // Tests included, emitted somewhere throwaway. `node --test` cannot run these
+  // files directly: decorators are not erasable syntax, so Node's type
+  // stripping cannot handle them and they need a real compile first.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist-test"
+  }
+}

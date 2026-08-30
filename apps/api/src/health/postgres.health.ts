@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { HealthIndicatorService, type HealthIndicatorResult } from '@nestjs/terminus';
 import type pg from 'pg';
 
-import { PG_POOL } from '../database/database.module';
+import { PG_POOL } from '../database/pg-pool';
 
 /**
  * Connection failures often arrive as an AggregateError (one failure per

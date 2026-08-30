@@ -4,8 +4,9 @@
   "private": true,
   "description": "HTTP API — auth, authorization, presigned URL minting",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
+    "test": "tsc -p tsconfig.test.json && node --test \"dist-test/**/*.test.js\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

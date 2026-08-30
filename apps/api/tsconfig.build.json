@@ -1,0 +1,6 @@
+{
+  // What `pnpm build` and the Dockerfile use. Same as tsconfig.json minus the
+  // tests, so they never ship in the image.
+  "extends": "./tsconfig.json",
+  "exclude": ["src/**/*.test.ts"]
+}
