@@ -5,10 +5,18 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 
 import { AppModule } from './app.module';
+import { ApiExceptionFilter } from './common/api-exception.filter';
 import type { Env } from './config/env';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+
+  // JSON lives under /api. The probes stay at the root because whatever polls
+  // them will not prepend a prefix. /g/:token joins this list in M3.
+  app.setGlobalPrefix('api', { exclude: ['healthz', 'readyz'] });
+
+  // Last thing to touch a failed request, so every error leaves in one shape.
+  app.useGlobalFilters(new ApiExceptionFilter());
 
   // Without this, onApplicationShutdown never fires and SIGTERM kills the
   // process with the Postgres pool still open.
