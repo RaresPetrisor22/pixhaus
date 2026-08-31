@@ -7,3 +7,9 @@ export const RegisterBody = z.object({
 });
 
 export type RegisterInput = z.infer<typeof RegisterBody>;
+
+export const VerifyEmailBody = z.object({
+  token: z.string().min(1).max(200),
+});
+
+export type VerifyEmailInput = z.infer<typeof VerifyEmailBody>;
