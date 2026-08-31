@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
+import { AuthModule } from './auth/auth.module';
 import { validateEnv } from './config/env';
 import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
@@ -26,6 +27,7 @@ import { MailModule } from './mail/mail.module';
     DatabaseModule,
     HealthModule,
     MailModule,
+    AuthModule,
   ],
 })
 export class AppModule {}
