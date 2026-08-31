@@ -4,6 +4,24 @@ import type pg from 'pg';
 import { PG_POOL } from '../database/pg-pool';
 import { TenantDb } from '../database/tenant-db.service';
 
+/**
+ * Constraint names from 0001_initial_schema.sql. They live here because they
+ * are schema knowledge, and the service should not hardcode database
+ * identifiers to work out what went wrong.
+ */
+export const UNIQUE_EMAIL = 'users_email_key';
+export const UNIQUE_SLUG = 'studios_slug_key';
+
+/** Everything registration needs to write, with nothing left to decide. */
+export type NewStudioOwner = {
+  studioId: string;
+  studioName: string;
+  slug: string;
+  email: string;
+  passwordHash: string;
+  verificationTokenHash: string;
+};
+
 /** A user resolved from a verification token, before any tenant was known. */
 export type VerificationCandidate = {
   userId: string;
@@ -35,6 +53,38 @@ export class AuthRepository {
     @Inject(PG_POOL) private readonly pool: pg.Pool,
     private readonly db: TenantDb,
   ) {}
+
+  /**
+   * The studio and its first user, in one transaction. `studioId` is generated
+   * by the caller rather than by the database: declaring it up front is what
+   * lets `WITH CHECK (id = current_studio_id())` pass on a tenant that does not
+   * exist yet.
+   *
+   * A unique violation propagates. Whether a duplicate email is a 409 and a
+   * duplicate slug is a retry is policy, and policy is the service's job.
+   */
+  createStudioWithOwner(input: NewStudioOwner): Promise<{ userId: string }> {
+    return this.db.withTenant(input.studioId, async (tx) => {
+      await tx.query('INSERT INTO studios (id, name, slug) VALUES ($1, $2, $3)', [
+        input.studioId,
+        input.studioName,
+        input.slug,
+      ]);
+
+      // `role` is omitted: the column defaults to 'owner'.
+      // `now()` rather than a JS timestamp, so the expiry clock is the
+      // database's and cannot drift with the API host's.
+      const { rows } = await tx.query<{ id: string }>(
+        `INSERT INTO users (studio_id, email, password_hash,
+                            email_verification_token_hash, email_verification_sent_at)
+         VALUES ($1, $2, $3, $4, now())
+         RETURNING id`,
+        [input.studioId, input.email, input.passwordHash, input.verificationTokenHash],
+      );
+
+      return { userId: rows[0].id };
+    });
+  }
 
   async findUserByVerificationToken(tokenHash: string): Promise<VerificationCandidate | null> {
     const { rows } = await this.pool.query<VerificationRow>(
