@@ -19,11 +19,6 @@ export class MailService {
     this.isProduction = config.get('NODE_ENV', { infer: true }) === 'production';
   }
 
-  /**
-   * Throws if the message cannot be handed to the SMTP server. Callers decide
-   * whether that should fail their request — registration does not, because
-   * the account exists by then and resend-verification is the way back.
-   */
   async sendVerificationEmail(to: string, token: string, ttlHours: number): Promise<void> {
     const url = `${this.appUrl}/verify-email?token=${encodeURIComponent(token)}`;
 

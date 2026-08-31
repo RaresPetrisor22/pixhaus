@@ -4,11 +4,6 @@ import type pg from 'pg';
 import { PG_POOL } from '../database/pg-pool';
 import { TenantDb } from '../database/tenant-db.service';
 
-/**
- * Constraint names from 0001_initial_schema.sql. They live here because they
- * are schema knowledge, and the service should not hardcode database
- * identifiers to work out what went wrong.
- */
 export const UNIQUE_EMAIL = 'users_email_key';
 export const UNIQUE_SLUG = 'studios_slug_key';
 
@@ -20,6 +15,21 @@ export type NewStudioOwner = {
   email: string;
   passwordHash: string;
   verificationTokenHash: string;
+};
+
+/** What login and resend-verification need, resolved from an email address. */
+export type UserCredentials = {
+  userId: string;
+  studioId: string;
+  passwordHash: string;
+  emailVerifiedAt: Date | null;
+};
+
+type CredentialsRow = {
+  id: string;
+  studio_id: string;
+  password_hash: string;
+  email_verified_at: Date | null;
 };
 
 /** A user resolved from a verification token, before any tenant was known. */
@@ -55,13 +65,7 @@ export class AuthRepository {
   ) {}
 
   /**
-   * The studio and its first user, in one transaction. `studioId` is generated
-   * by the caller rather than by the database: declaring it up front is what
-   * lets `WITH CHECK (id = current_studio_id())` pass on a tenant that does not
-   * exist yet.
-   *
-   * A unique violation propagates. Whether a duplicate email is a 409 and a
-   * duplicate slug is a retry is policy, and policy is the service's job.
+   * The studio and its first user, in one transaction.
    */
   createStudioWithOwner(input: NewStudioOwner): Promise<{ userId: string }> {
     return this.db.withTenant(input.studioId, async (tx) => {
@@ -71,9 +75,6 @@ export class AuthRepository {
         input.slug,
       ]);
 
-      // `role` is omitted: the column defaults to 'owner'.
-      // `now()` rather than a JS timestamp, so the expiry clock is the
-      // database's and cannot drift with the API host's.
       const { rows } = await tx.query<{ id: string }>(
         `INSERT INTO users (studio_id, email, password_hash,
                             email_verification_token_hash, email_verification_sent_at)
@@ -84,6 +85,25 @@ export class AuthRepository {
 
       return { userId: rows[0].id };
     });
+  }
+
+  async findUserByEmail(email: string): Promise<UserCredentials | null> {
+    const { rows } = await this.pool.query<CredentialsRow>(
+      'SELECT * FROM auth_lookup_user_by_email($1)',
+      [email],
+    );
+
+    const row = rows[0];
+    if (!row) {
+      return null;
+    }
+
+    return {
+      userId: row.id,
+      studioId: row.studio_id,
+      passwordHash: row.password_hash,
+      emailVerifiedAt: row.email_verified_at,
+    };
   }
 
   async findUserByVerificationToken(tokenHash: string): Promise<VerificationCandidate | null> {
@@ -97,13 +117,25 @@ export class AuthRepository {
       return null;
     }
 
-    // snake_case stops here. The service speaks the application's vocabulary.
     return {
       userId: row.id,
       studioId: row.studio_id,
       emailVerifiedAt: row.email_verified_at,
       verificationSentAt: row.email_verification_sent_at,
     };
+  }
+
+  /** Issuing a new link invalidates the previous one: same column, new hash. */
+  setVerificationToken(studioId: string, userId: string, tokenHash: string): Promise<void> {
+    return this.db.withTenant(studioId, async (tx) => {
+      await tx.query(
+        `UPDATE users
+            SET email_verification_token_hash = $1,
+                email_verification_sent_at = now()
+          WHERE id = $2`,
+        [tokenHash, userId],
+      );
+    });
   }
 
   markEmailVerified(studioId: string, userId: string): Promise<void> {

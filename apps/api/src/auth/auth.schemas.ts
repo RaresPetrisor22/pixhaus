@@ -13,3 +13,9 @@ export const VerifyEmailBody = z.object({
 });
 
 export type VerifyEmailInput = z.infer<typeof VerifyEmailBody>;
+
+export const ResendVerificationBody = z.object({
+  email: z.email().toLowerCase().max(254),
+});
+
+export type ResendVerificationInput = z.infer<typeof ResendVerificationBody>;

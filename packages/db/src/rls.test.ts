@@ -190,6 +190,28 @@ async function createStudio(): Promise<Studio> {
   }
 }
 
+/**
+ * Removes anything a previous run left behind. Needed because a run killed
+ * partway through never reaches its after() hook, and the app role cannot find
+ * the strays afterwards -- enumerating other tenants is precisely what RLS
+ * forbids. So this one sweep uses the owner, and is skipped when that
+ * connection string is not available.
+ */
+async function sweepStrays(): Promise<void> {
+  const connectionString = process.env.MIGRATION_DATABASE_URL;
+  if (!connectionString) {
+    return;
+  }
+
+  const owner = new Client({ connectionString, application_name: 'pixhaus-test-sweep' });
+  await owner.connect();
+  try {
+    await owner.query("DELETE FROM studios WHERE slug LIKE 'rls-test-%'");
+  } finally {
+    await owner.end();
+  }
+}
+
 /** Deleting the studio cascades to users and sessions. */
 async function deleteStudio(studioId: string): Promise<void> {
   const client = await pool.connect();
@@ -210,6 +232,7 @@ describe('row-level security', { skip }, () => {
   let beta: Studio;
 
   before(async () => {
+    await sweepStrays();
     pool = new Pool({
       connectionString: CONNECTION_STRING,
       application_name: 'pixhaus-test',
