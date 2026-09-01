@@ -36,7 +36,19 @@ jobs:
       # typecheck is --noEmit; this proves the deployable artifact actually
       # compiles, which is a different failure mode.
       - run: pnpm build
+
+      # packages/db/src/rls.test.ts skips itself without a reachable database,
+      # so without this the tenant-isolation suite would pass by not running.
+      - name: Start Postgres and migrate
+        run: |
+          cp .env.example .env
+          docker compose up -d --wait postgres
+          pnpm db:migrate
+
       - run: pnpm test
+        env:
+          TEST_DATABASE_URL: postgresql://pixhaus_app:dev_app_password@localhost:5432/pixhaus
+          MIGRATION_DATABASE_URL: postgresql://pixhaus_owner:dev_owner_password@localhost:5432/pixhaus
 
   migrate:
     name: Migrations apply to an empty database
