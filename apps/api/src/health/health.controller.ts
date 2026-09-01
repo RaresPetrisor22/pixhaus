@@ -1,5 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
+import { SkipThrottle } from '@nestjs/throttler';
 
 import { Public } from '../auth/public.decorator';
 import { PostgresHealthIndicator } from './postgres.health';
@@ -9,6 +10,7 @@ import { PostgresHealthIndicator } from './postgres.health';
  */
 // Probes carry no credential, and SessionGuard would otherwise 401 them.
 @Public()
+@SkipThrottle()
 @Controller()
 export class HealthController {
   constructor(

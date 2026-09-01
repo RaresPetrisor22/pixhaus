@@ -5,6 +5,7 @@ import { MailModule } from '../mail/mail.module';
 import { AuthController } from './auth.controller';
 import { AuthRepository } from './auth.repository';
 import { AuthService } from './auth.service';
+import { EmailThrottlerGuard } from './email-throttler.guard';
 import { SessionGuard } from './session.guard';
 import { SessionService } from './session.service';
 
@@ -15,6 +16,7 @@ import { SessionService } from './session.service';
     AuthService,
     AuthRepository,
     SessionService,
+    EmailThrottlerGuard,
     // APP_GUARD applies this to every route in the application, not just this
     // module's. Declaring it here is what lets it inject SessionService.
     { provide: APP_GUARD, useClass: SessionGuard },
