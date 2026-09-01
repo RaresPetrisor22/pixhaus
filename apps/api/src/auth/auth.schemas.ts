@@ -19,3 +19,11 @@ export const ResendVerificationBody = z.object({
 });
 
 export type ResendVerificationInput = z.infer<typeof ResendVerificationBody>;
+
+export const LoginBody = z.object({
+  email: z.email().toLowerCase().max(254),
+  // No min() here. Length rules belong on the password being set
+  password: z.string().max(200),
+});
+
+export type LoginInput = z.infer<typeof LoginBody>;

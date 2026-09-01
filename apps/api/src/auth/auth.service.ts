@@ -7,13 +7,17 @@ import { ApiException } from '../common/api-exception';
 import type { Env } from '../config/env';
 import { uniqueViolation } from '../database/pg-errors';
 import { MailService } from '../mail/mail.service';
-import { AuthRepository, UNIQUE_EMAIL, UNIQUE_SLUG } from './auth.repository';
-import type { RegisterInput } from './auth.schemas';
-import { hashPassword } from './password';
+import { AuthRepository, UNIQUE_EMAIL, UNIQUE_SLUG, type Profile } from './auth.repository';
+import type { LoginInput, RegisterInput } from './auth.schemas';
+import { hashPassword, verifyDummy, verifyPassword } from './password';
+import type { StudioUserPrincipal } from './principal';
+import { SessionService, type SessionContext } from './session.service';
 import { slugify, withRandomSuffix } from './slug';
 import { generateToken, hashToken } from './tokens';
 
 const SLUG_ATTEMPTS = 5;
+
+export type LoggedIn = { token: string; profile: Profile };
 
 export type RegisteredStudio = {
   user: { id: string; email: string; emailVerified: boolean };
@@ -27,6 +31,7 @@ export class AuthService {
 
   constructor(
     private readonly repository: AuthRepository,
+    private readonly sessions: SessionService,
     private readonly mail: MailService,
     config: ConfigService<Env, true>,
   ) {
@@ -82,6 +87,52 @@ export class AuthService {
     }
 
     throw new Error(`could not find a free studio slug for "${base}" in ${SLUG_ATTEMPTS} attempts`);
+  }
+
+  /**
+   * An unknown email and a wrong password give the same answer, and take about
+   * the same time to give it -- hence verifyDummy on the branch with no hash to
+   * check against.
+   */
+  async login(input: LoginInput, context: SessionContext): Promise<LoggedIn> {
+    const user = await this.repository.findUserByEmail(input.email);
+
+    if (!user) {
+      await verifyDummy(input.password);
+      throw invalidCredentials();
+    }
+
+    if (!(await verifyPassword(user.passwordHash, input.password))) {
+      throw invalidCredentials();
+    }
+
+    const token = await this.sessions.issue(user.userId, user.studioId, context);
+    const profile = await this.repository.findProfile(user.studioId, user.userId);
+
+    if (!profile) {
+      throw new Error(`session issued for user ${user.userId} but no profile was visible`);
+    }
+
+    return { token, profile };
+  }
+
+  logout(principal: StudioUserPrincipal): Promise<void> {
+    return this.sessions.revoke(principal);
+  }
+
+  logoutEverywhere(principal: StudioUserPrincipal): Promise<number> {
+    return this.sessions.revokeAll(principal);
+  }
+
+  async me(principal: StudioUserPrincipal): Promise<Profile> {
+    const profile = await this.repository.findProfile(principal.studioId, principal.userId);
+
+    // The session resolved, so this user existed moments ago. Deleted since.
+    if (!profile) {
+      throw new ApiException(HttpStatus.UNAUTHORIZED, 'unauthenticated', 'Sign in to continue.');
+    }
+
+    return profile;
   }
 
   /**
@@ -146,4 +197,12 @@ export class AuthService {
     }
     return sentAt.getTime() + this.verificationTtlHours * 3_600_000 <= Date.now();
   }
+}
+
+function invalidCredentials(): ApiException {
+  return new ApiException(
+    HttpStatus.UNAUTHORIZED,
+    'invalid_credentials',
+    'That email and password do not match.',
+  );
 }

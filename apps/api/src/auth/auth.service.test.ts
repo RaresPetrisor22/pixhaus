@@ -12,11 +12,14 @@ import {
   UNIQUE_SLUG,
   type AuthRepository,
   type NewStudioOwner,
+  type Profile,
   type UserCredentials,
   type VerificationCandidate,
 } from './auth.repository';
 import { AuthService } from './auth.service';
-import { verifyPassword } from './password';
+import { hashPassword, verifyPassword } from './password';
+import type { StudioUserPrincipal } from './principal';
+import type { SessionService } from './session.service';
 import { generateToken, hashToken } from './tokens';
 
 const TTL_HOURS = 24;
@@ -40,6 +43,7 @@ function build(
     /** Constraint names to fail on, one per successive insert attempt. */
     insertFailures?: string[];
     mailThrows?: boolean;
+    profile?: Profile | null;
   } = {},
 ) {
   const inserts: NewStudioOwner[] = [];
@@ -47,6 +51,9 @@ function build(
   const marked: { studioId: string; userId: string }[] = [];
   const lookedUpWith: string[] = [];
   const sent: { to: string; token: string; ttlHours: number }[] = [];
+  const issued: { userId: string; studioId: string }[] = [];
+  const revoked: StudioUserPrincipal[] = [];
+  const revokedAll: StudioUserPrincipal[] = [];
   const failures = [...(options.insertFailures ?? [])];
 
   const repository = {
@@ -71,7 +78,23 @@ function build(
       marked.push({ studioId, userId });
       return Promise.resolve();
     },
+    findProfile: () => Promise.resolve(options.profile === undefined ? PROFILE : options.profile),
   } as unknown as AuthRepository;
+
+  const sessions = {
+    issue: (userId: string, studioId: string) => {
+      issued.push({ userId, studioId });
+      return Promise.resolve('session-token');
+    },
+    revoke: (principal: StudioUserPrincipal) => {
+      revoked.push(principal);
+      return Promise.resolve();
+    },
+    revokeAll: (principal: StudioUserPrincipal) => {
+      revokedAll.push(principal);
+      return Promise.resolve(3);
+    },
+  } as unknown as SessionService;
 
   const mail = {
     sendVerificationEmail: (to: string, token: string, ttlHours: number) => {
@@ -86,14 +109,29 @@ function build(
   const config = { get: () => TTL_HOURS } as unknown as ConfigService<Env, true>;
 
   return {
-    service: new AuthService(repository, mail, config),
+    service: new AuthService(repository, sessions, mail, config),
     inserts,
     tokensSet,
     marked,
     lookedUpWith,
     sent,
+    issued,
+    revoked,
+    revokedAll,
   };
 }
+
+const PROFILE: Profile = {
+  user: { id: 'user-1', email: 'me@example.com', role: 'owner', emailVerified: true },
+  studio: { id: 'studio-1', name: 'Rares Photo', slug: 'rares-photo' },
+};
+
+const PRINCIPAL: StudioUserPrincipal = {
+  kind: 'user',
+  userId: 'user-1',
+  studioId: 'studio-1',
+  sessionId: 'a'.repeat(64),
+};
 
 const REGISTRATION = {
   studioName: 'Rares Photo',
@@ -310,5 +348,132 @@ describe('AuthService.verifyEmail', () => {
     await service.verifyEmail(generateToken());
 
     assert.deepEqual(marked, []);
+  });
+});
+
+describe('AuthService.login', () => {
+  let passwordHash: string;
+
+  before(async () => {
+    passwordHash = await hashPassword(REGISTRATION.password);
+  });
+
+  const credentials = (hash: string): UserCredentials => ({
+    userId: 'user-1',
+    studioId: 'studio-1',
+    passwordHash: hash,
+    emailVerifiedAt: null,
+  });
+
+  test('issues a session and returns the profile', async () => {
+    const { service, issued } = build({ credentials: credentials(passwordHash) });
+
+    const result = await service.login(
+      { email: 'me@example.com', password: REGISTRATION.password },
+      {},
+    );
+
+    assert.deepEqual(issued, [{ userId: 'user-1', studioId: 'studio-1' }]);
+    assert.equal(result.token, 'session-token');
+    assert.deepEqual(result.profile, PROFILE);
+  });
+
+  test('rejects a wrong password without issuing anything', async () => {
+    const { service, issued } = build({ credentials: credentials(passwordHash) });
+
+    await assert.rejects(
+      service.login({ email: 'me@example.com', password: 'not the password' }, {}),
+      (error: unknown) => {
+        assert.ok(error instanceof ApiException);
+        assert.equal(error.getStatus(), 401);
+        assert.equal(error.code, 'invalid_credentials');
+        return true;
+      },
+    );
+    assert.deepEqual(issued, []);
+  });
+
+  test('gives an unknown email the identical error', async () => {
+    const { service, issued } = build({ credentials: null });
+
+    await assert.rejects(
+      service.login({ email: 'nobody@example.com', password: REGISTRATION.password }, {}),
+      (error: unknown) => {
+        assert.ok(error instanceof ApiException);
+        assert.equal(error.getStatus(), 401);
+        assert.equal(error.code, 'invalid_credentials');
+        return true;
+      },
+    );
+    assert.deepEqual(issued, []);
+  });
+
+  test('takes comparable time whether the email exists or not', async () => {
+    const known = build({ credentials: credentials(passwordHash) });
+    const unknown = build({ credentials: null });
+
+    const t1 = performance.now();
+    await assert.rejects(known.service.login({ email: 'me@example.com', password: 'wrong' }, {}));
+    const wrongPassword = performance.now() - t1;
+
+    const t2 = performance.now();
+    await assert.rejects(
+      unknown.service.login({ email: 'nobody@example.com', password: 'wrong' }, {}),
+    );
+    const unknownEmail = performance.now() - t2;
+
+    // Skipping verifyDummy would make the unknown-email branch return in
+    // microseconds against tens of milliseconds, which is what an attacker
+    // measures. Loose bound, not a stopwatch.
+    assert.ok(
+      unknownEmail > wrongPassword / 4,
+      `unknown email ${unknownEmail.toFixed(1)}ms vs wrong password ${wrongPassword.toFixed(1)}ms`,
+    );
+  });
+
+  test('does not let a login succeed with no profile behind it', async () => {
+    const { service } = build({ credentials: credentials(passwordHash), profile: null });
+
+    await assert.rejects(
+      service.login({ email: 'me@example.com', password: REGISTRATION.password }, {}),
+      /no profile was visible/,
+    );
+  });
+});
+
+describe('AuthService sessions', () => {
+  test('logout revokes only the current session', async () => {
+    const { service, revoked, revokedAll } = build();
+
+    await service.logout(PRINCIPAL);
+
+    assert.deepEqual(revoked, [PRINCIPAL]);
+    assert.deepEqual(revokedAll, []);
+  });
+
+  test('logoutEverywhere revokes them all and reports how many', async () => {
+    const { service, revoked, revokedAll } = build();
+
+    const count = await service.logoutEverywhere(PRINCIPAL);
+
+    assert.equal(count, 3);
+    assert.deepEqual(revokedAll, [PRINCIPAL]);
+    assert.deepEqual(revoked, []);
+  });
+
+  test('me returns the profile for the principal tenant', async () => {
+    const { service } = build();
+
+    assert.deepEqual(await service.me(PRINCIPAL), PROFILE);
+  });
+
+  test('me 401s if the user vanished since the session resolved', async () => {
+    const { service } = build({ profile: null });
+
+    await assert.rejects(service.me(PRINCIPAL), (error: unknown) => {
+      assert.ok(error instanceof ApiException);
+      assert.equal(error.getStatus(), 401);
+      return true;
+    });
   });
 });

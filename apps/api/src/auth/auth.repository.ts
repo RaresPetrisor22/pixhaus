@@ -17,6 +17,46 @@ export type NewStudioOwner = {
   verificationTokenHash: string;
 };
 
+/** A session row, resolved from a cookie before any tenant was known. */
+export type SessionRecord = {
+  userId: string;
+  studioId: string;
+  expiresAt: Date;
+  lastSeenAt: Date;
+};
+
+type SessionRow = {
+  user_id: string;
+  studio_id: string;
+  expires_at: Date;
+  last_seen_at: Date;
+};
+
+export type NewSession = {
+  id: string;
+  userId: string;
+  studioId: string;
+  ip: string | null;
+  userAgent: string | null;
+  ttlHours: number;
+};
+
+/** What GET /api/auth/me answers with. */
+export type Profile = {
+  user: { id: string; email: string; role: string; emailVerified: boolean };
+  studio: { id: string; name: string; slug: string };
+};
+
+type ProfileRow = {
+  id: string;
+  email: string;
+  role: string;
+  email_verified_at: Date | null;
+  studio_id: string;
+  studio_name: string;
+  studio_slug: string;
+};
+
 /** What login and resend-verification need, resolved from an email address. */
 export type UserCredentials = {
   userId: string;
@@ -135,6 +175,95 @@ export class AuthRepository {
           WHERE id = $2`,
         [tokenHash, userId],
       );
+    });
+  }
+
+  createSession(session: NewSession): Promise<void> {
+    return this.db.withTenant(session.studioId, async (tx) => {
+      await tx.query(
+        `INSERT INTO sessions (id, user_id, studio_id, ip, user_agent, expires_at)
+         VALUES ($1, $2, $3, $4, $5, now() + make_interval(hours => $6::int))`,
+        [
+          session.id,
+          session.userId,
+          session.studioId,
+          session.ip,
+          session.userAgent,
+          session.ttlHours,
+        ],
+      );
+    });
+  }
+
+  async findSession(sessionId: string): Promise<SessionRecord | null> {
+    const { rows } = await this.pool.query<SessionRow>('SELECT * FROM auth_resolve_session($1)', [
+      sessionId,
+    ]);
+
+    const row = rows[0];
+    if (!row) {
+      return null;
+    }
+
+    return {
+      userId: row.user_id,
+      studioId: row.studio_id,
+      expiresAt: row.expires_at,
+      lastSeenAt: row.last_seen_at,
+    };
+  }
+
+  /** Slides the expiry forward so an active session does not end mid-use. */
+  touchSession(studioId: string, sessionId: string, ttlHours: number): Promise<void> {
+    return this.db.withTenant(studioId, async (tx) => {
+      await tx.query(
+        `UPDATE sessions
+            SET last_seen_at = now(),
+                expires_at = now() + make_interval(hours => $2::int)
+          WHERE id = $1`,
+        [sessionId, ttlHours],
+      );
+    });
+  }
+
+  deleteSession(studioId: string, sessionId: string): Promise<void> {
+    return this.db.withTenant(studioId, async (tx) => {
+      await tx.query('DELETE FROM sessions WHERE id = $1', [sessionId]);
+    });
+  }
+
+  deleteSessionsForUser(studioId: string, userId: string): Promise<number> {
+    return this.db.withTenant(studioId, async (tx) => {
+      const result = await tx.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+      return result.rowCount ?? 0;
+    });
+  }
+
+  findProfile(studioId: string, userId: string): Promise<Profile | null> {
+    return this.db.withTenant(studioId, async (tx) => {
+      const { rows } = await tx.query<ProfileRow>(
+        `SELECT u.id, u.email, u.role, u.email_verified_at,
+                s.id AS studio_id, s.name AS studio_name, s.slug AS studio_slug
+           FROM users u
+           JOIN studios s ON s.id = u.studio_id
+          WHERE u.id = $1`,
+        [userId],
+      );
+
+      const row = rows[0];
+      if (!row) {
+        return null;
+      }
+
+      return {
+        user: {
+          id: row.id,
+          email: row.email,
+          role: row.role,
+          emailVerified: row.email_verified_at !== null,
+        },
+        studio: { id: row.studio_id, name: row.studio_name, slug: row.studio_slug },
+      };
     });
   }
 
