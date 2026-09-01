@@ -89,8 +89,18 @@ handler genuinely cannot tell the difference either.
 | `DELETE` | `/api/auth/sessions`            | `session` | "Sign out everywhere" — deletes every session for the user.                                                   |
 | `GET`    | `/api/auth/me`                  | `session` | Current user + studio. What the SPA calls on boot to decide if it is logged in.                               |
 
-Registration and login are two of the four operations that must run before a tenant is known — see
-the RLS bootstrap note at the bottom of `packages/db/migrations/0001_initial_schema.sql`.
+Registration and login are two of the operations that must run before a tenant is known — see the
+header of `packages/db/migrations/0002_auth_bootstrap.sql` and [ADR 0003](adr/0003-photographer-sessions-and-the-rls-bootstrap.md).
+
+Rate limits, in-memory and therefore per API process:
+
+| Route                 | Per IP      | Per email   |
+| --------------------- | ----------- | ----------- |
+| `register`            | 5 / hour    | —           |
+| `login`               | 30 / 15 min | 10 / 15 min |
+| `resend-verification` | 10 / hour   | 3 / hour    |
+| `verify-email`        | 30 / hour   | —           |
+| everything else       | 120 / min   | —           |
 
 ### Galleries
 

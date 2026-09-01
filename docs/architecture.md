@@ -33,7 +33,7 @@ flowchart TB
         API["API<br/>auth · authorize() · presign · grants"]
         WK["Worker pool<br/>libvips renditions · zip builder"]
         PG[("Postgres<br/>studios · galleries · assets · grants")]
-        RD[("Redis<br/>sessions · job queue · revocation denylist")]
+        RD[("Redis<br/>job queue · revocation denylist")]
         MP["Mailpit / SMTP<br/>magic links"]
     end
 
@@ -94,7 +94,9 @@ erDiagram
     SESSIONS {
         string id PK
         uuid user_id FK
+        uuid studio_id FK
         timestamp expires_at
+        timestamp last_seen_at
         inet ip
     }
     GALLERIES {
@@ -291,7 +293,9 @@ accumulate rows pointing at objects that may or may not exist, and you pay to st
 | Client shares gallery link publicly   | Grants expire; email-gated magic link; revocation epoch; per-grant rate limits on mint                       |
 | Guessing another gallery's assets     | Presigned URLs minted only after `authorize()`; asset IDs are UUIDs; tenant predicate on every query         |
 | Revoked client keeps their token      | Short token TTL bounds the window; Redis denylist for immediate kill                                         |
-| Cross-tenant data leak                | `studio_id` on every row; base repository requires tenant context                                            |
+| Cross-tenant data leak                | `studio_id` on every row; RLS policies; `TenantDb.withTenant` is the only way to get a client                |
+| Stolen session cookie                 | `HttpOnly` + `SameSite=Lax`; DB stores only its SHA-256; revocable by row delete                             |
+| Credential stuffing                   | argon2id; identical answer and timing for unknown email vs wrong password; per-IP **and** per-email limits   |
 | Stolen preview reveals location       | EXIF stripped from all derivatives; originals retain it                                                      |
 | Worker retry duplicates work          | Idempotency key = content hash + rendition spec                                                              |
 
