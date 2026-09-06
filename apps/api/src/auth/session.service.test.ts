@@ -55,6 +55,7 @@ const live: SessionRecord = {
   studioId: 'studio-1',
   expiresAt: minutesFromNow(60),
   lastSeenAt: new Date(),
+  emailVerifiedAt: new Date(),
 };
 
 describe('SessionService.issue', () => {
@@ -107,7 +108,16 @@ describe('SessionService.resolve', () => {
       userId: 'user-1',
       studioId: 'studio-1',
       sessionId: hashToken('the-raw-token'),
+      emailVerified: true,
     });
+  });
+
+  test('carries the verification state authorize() gates writes on', async () => {
+    const { sessions } = build({ ...live, emailVerifiedAt: null });
+
+    const principal = await sessions.resolve('the-raw-token');
+
+    assert.equal(principal?.emailVerified, false);
   });
 
   test('returns null for a token that resolves to nothing', async () => {
@@ -152,6 +162,7 @@ describe('SessionService revocation', () => {
       userId: 'user-1',
       studioId: 'studio-1',
       sessionId: 'session-id',
+      emailVerified: true,
     });
 
     assert.deepEqual(deleted, ['session-id']);
@@ -166,6 +177,7 @@ describe('SessionService revocation', () => {
       userId: 'user-1',
       studioId: 'studio-1',
       sessionId: 'session-id',
+      emailVerified: true,
     });
 
     assert.equal(count, 3);

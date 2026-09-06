@@ -473,6 +473,16 @@ describe('row-level security', { skip }, () => {
       const { rows } = await pool.query('SELECT * FROM auth_resolve_session($1)', [tokenHash()]);
       assert.equal(rows.length, 0);
     });
+
+    test('answers whether the account is verified, in the same round trip', async () => {
+      const { rows } = await pool.query<{ email_verified_at: Date | null }>(
+        'SELECT * FROM auth_resolve_session($1)',
+        [sessionId],
+      );
+
+      assert.equal(rows.length, 1);
+      assert.ok('email_verified_at' in rows[0], 'email_verified_at is part of the shape');
+    });
   });
 
   describe('auth_lookup_user_by_verification_token', () => {

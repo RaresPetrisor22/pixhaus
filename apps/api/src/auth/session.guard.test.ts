@@ -14,6 +14,7 @@ const PRINCIPAL: StudioUserPrincipal = {
   userId: 'user-1',
   studioId: 'studio-1',
   sessionId: 'a'.repeat(64),
+  emailVerified: true,
 };
 
 function build(options: { isPublic?: boolean; cookie?: string; resolves?: boolean } = {}) {

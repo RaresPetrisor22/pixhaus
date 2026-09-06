@@ -10,6 +10,8 @@ export type StudioUserPrincipal = {
   userId: string;
   studioId: string;
   sessionId: string;
+
+  emailVerified: boolean;
 };
 
 /** What the guard attaches, and @CurrentUser() reads back. */

@@ -64,6 +64,7 @@ export class SessionService {
       userId: session.userId,
       studioId: session.studioId,
       sessionId,
+      emailVerified: session.emailVerifiedAt !== null,
     };
   }
 

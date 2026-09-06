@@ -23,6 +23,7 @@ export type SessionRecord = {
   studioId: string;
   expiresAt: Date;
   lastSeenAt: Date;
+  emailVerifiedAt: Date | null;
 };
 
 type SessionRow = {
@@ -30,6 +31,7 @@ type SessionRow = {
   studio_id: string;
   expires_at: Date;
   last_seen_at: Date;
+  email_verified_at: Date | null;
 };
 
 export type NewSession = {
@@ -210,6 +212,7 @@ export class AuthRepository {
       studioId: row.studio_id,
       expiresAt: row.expires_at,
       lastSeenAt: row.last_seen_at,
+      emailVerifiedAt: row.email_verified_at,
     };
   }
 
