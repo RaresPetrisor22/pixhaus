@@ -31,3 +31,6 @@ export class ZodBody<S extends z.ZodType> implements PipeTransform<unknown, z.ou
     );
   }
 }
+
+// The same pipe against a query string:
+export const ZodQuery = ZodBody;
