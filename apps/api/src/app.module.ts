@@ -11,6 +11,7 @@ import { DatabaseModule } from './database/database.module';
 import { GalleriesModule } from './galleries/galleries.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { MailModule } from './mail/mail.module';
     DatabaseModule,
     HealthModule,
     MailModule,
+    StorageModule,
     AuthModule,
     GalleriesModule,
   ],
