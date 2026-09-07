@@ -100,7 +100,6 @@ services:
         condition: service_healthy
 
     environment:
-     
       STORAGE_ENDPOINT: http://minio:9000
       STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?}
       STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?}
@@ -191,7 +190,6 @@ services:
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-336}
       EMAIL_VERIFICATION_TTL_HOURS: ${EMAIL_VERIFICATION_TTL_HOURS:-24}
 
-     
       STORAGE_ENDPOINT: http://minio:9000
       STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:${MINIO_PORT:-9000}}
 
