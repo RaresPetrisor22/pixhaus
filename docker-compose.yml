@@ -64,6 +64,9 @@ services:
       MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:?set STORAGE_ACCESS_KEY in .env}
       MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:?set STORAGE_SECRET_KEY in .env}
 
+      # The browser PUTs straight to this origin, so the bucket needs CORS.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${APP_URL:-http://localhost:3000}
+
     ports:
       - '127.0.0.1:${MINIO_PORT:-9000}:9000'
       - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
@@ -97,7 +100,8 @@ services:
         condition: service_healthy
 
     environment:
-      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:?set STORAGE_ENDPOINT in .env}
+     
+      STORAGE_ENDPOINT: http://minio:9000
       STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?}
       STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?}
       STORAGE_BUCKET: ${STORAGE_BUCKET:?set STORAGE_BUCKET in .env}
@@ -163,6 +167,11 @@ services:
         condition: service_completed_successfully
       mailpit:
         condition: service_started
+      minio:
+        condition: service_healthy
+      # Not just minio: the bucket has to exist before /readyz can HEAD it.
+      minio-init:
+        condition: service_completed_successfully
 
     environment:
       NODE_ENV: production
@@ -181,6 +190,19 @@ services:
 
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-336}
       EMAIL_VERIFICATION_TTL_HOURS: ${EMAIL_VERIFICATION_TTL_HOURS:-24}
+
+     
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:${MINIO_PORT:-9000}}
+
+      STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:?set STORAGE_BUCKET in .env}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?set STORAGE_ACCESS_KEY in .env}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?set STORAGE_SECRET_KEY in .env}
+      STORAGE_FORCE_PATH_STYLE: ${STORAGE_FORCE_PATH_STYLE:-true}
+
+      UPLOAD_URL_TTL_SECONDS: ${UPLOAD_URL_TTL_SECONDS:-900}
+      UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-104857600}
 
     ports:
       - '127.0.0.1:${API_PORT:-3000}:3000'
