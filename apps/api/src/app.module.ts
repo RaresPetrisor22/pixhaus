@@ -12,6 +12,7 @@ import { GalleriesModule } from './galleries/galleries.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
 import { StorageModule } from './storage/storage.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { StorageModule } from './storage/storage.module';
     StorageModule,
     AuthModule,
     GalleriesModule,
+    UploadsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
