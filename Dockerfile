@@ -30,6 +30,7 @@ COPY apps/api/package.json apps/api/
 COPY apps/worker/package.json apps/worker/
 COPY packages/db/package.json packages/db/
 COPY packages/jobs/package.json packages/jobs/
+COPY packages/storage/package.json packages/storage/
 RUN pnpm install --frozen-lockfile
 
 
@@ -40,6 +41,7 @@ FROM deps AS build
 COPY tsconfig.base.json ./
 COPY packages/db packages/db
 COPY packages/jobs packages/jobs
+COPY packages/storage packages/storage
 COPY apps/api apps/api
 # packages/db first: apps/api imports the tenant wall from it, and a workspace
 # dependency has to exist as compiled .js before the dependent compiles against
@@ -58,13 +60,15 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY packages/db/package.json packages/db/
 COPY packages/jobs/package.json packages/jobs/
-# The trailing `...` means "and its workspace dependencies", which is what links
-# @pixhaus/db and @pixhaus/jobs into node_modules.
+COPY packages/storage/package.json packages/storage/
+# The trailing `...` means "and its workspace dependencies", which links
+# @pixhaus/db, @pixhaus/jobs and @pixhaus/storage into node_modules.
 RUN pnpm install --frozen-lockfile --prod --filter @pixhaus/api...
 
 COPY --from=build /repo/apps/api/dist apps/api/dist
 COPY --from=build /repo/packages/db/dist packages/db/dist
 COPY --from=build /repo/packages/jobs/dist packages/jobs/dist
+COPY --from=build /repo/packages/storage/dist packages/storage/dist
 
 # The node image ships an unprivileged `node` user. Containers run as root
 # unless told otherwise, and this one has no reason to.
@@ -87,11 +91,13 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/worker/package.json apps/worker/
 COPY packages/db/package.json packages/db/
 COPY packages/jobs/package.json packages/jobs/
+COPY packages/storage/package.json packages/storage/
 RUN pnpm install --frozen-lockfile --prod --filter @pixhaus/worker...
 
 COPY apps/worker/src apps/worker/src
 COPY --from=build /repo/packages/db/dist packages/db/dist
 COPY --from=build /repo/packages/jobs/dist packages/jobs/dist
+COPY --from=build /repo/packages/storage/dist packages/storage/dist
 
 USER node
 

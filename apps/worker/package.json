@@ -11,6 +11,7 @@
   "dependencies": {
     "@pixhaus/db": "workspace:*",
     "@pixhaus/jobs": "workspace:*",
+    "@pixhaus/storage": "workspace:*",
     "bullmq": "^5.63.0",
     "ioredis": "^5.9.0",
     "pg": "^8.22.0"

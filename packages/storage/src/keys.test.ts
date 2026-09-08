@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { isWithinStudio, originalKey, renditionKey, studioPrefix } from './storage-key';
+import { isWithinStudio, originalKey, renditionKey, studioPrefix } from './keys.ts';
 
 const A = '11111111-1111-1111-1111-111111111111';
 const B = '22222222-2222-2222-2222-222222222222';

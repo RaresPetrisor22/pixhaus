@@ -1,0 +1,15 @@
+{
+  // package.json points `types` at src/index.ts and `default` at dist/index.js.
+  // Consumers therefore typecheck against current source with no build step,
+  // while anything that RUNS needs this output. That is why the root `test`
+  // script builds packages first and `typecheck` does not have to.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/index.ts", "src/keys.ts", "src/object-store.ts"]
+}

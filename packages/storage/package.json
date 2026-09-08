@@ -1,0 +1,23 @@
+{
+  "name": "@pixhaus/storage",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Object keys and the S3-compatible client, shared by the API and the worker",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.933.0"
+  }
+}

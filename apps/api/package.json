@@ -21,6 +21,7 @@
     "@node-rs/argon2": "^2.2.0",
     "@pixhaus/db": "workspace:*",
     "@pixhaus/jobs": "workspace:*",
+    "@pixhaus/storage": "workspace:*",
     "bullmq": "^6.3.4",
     "ioredis": "^6.0.0",
     "nodemailer": "^9.0.6",

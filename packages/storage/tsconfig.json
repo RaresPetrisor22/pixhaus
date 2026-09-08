@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "noEmit": true,
+
+    // keys.test.ts is run directly by `node --test`, and Node's type stripping
+    // resolves the file named on disk — it does not rewrite .js to .ts. So the
+    // test imports './keys.ts'. tsconfig.build.json turns this off and excludes
+    // the tests, which is why the emitted output can still import './keys.js'.
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true
+  },
+  "include": ["src/**/*.ts"]
+}

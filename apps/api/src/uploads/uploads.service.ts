@@ -7,7 +7,7 @@ import { authorize } from '../authz/authorize';
 import { ApiException } from '../common/api-exception';
 import { GalleriesRepository } from '../galleries/galleries.repository';
 import { QueueService } from '../queue/queue.service';
-import { originalKey } from '../storage/storage-key';
+import { originalKey } from '@pixhaus/storage';
 import { StorageService } from '../storage/storage.service';
 import { isAcceptedContentType, ACCEPTED_CONTENT_TYPES } from './content-types';
 import { MAGIC_BYTES_NEEDED, sniffImageType } from './magic-bytes';
