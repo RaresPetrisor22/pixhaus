@@ -72,6 +72,34 @@ export class UploadsRepository {
     });
   }
 
+  /**
+   * Only what the server observed. Guarded on status so two concurrent
+   * finalizes cannot both win: the second updates zero rows and is told so.
+   */
+  markUploaded(
+    studioId: string,
+    assetId: string,
+    observed: { contentType: string; sizeBytes: number },
+  ): Promise<boolean> {
+    return this.db.withTenant(studioId, async (tx) => {
+      const result = await tx.query(
+        `UPDATE assets
+            SET status = 'uploaded', content_type = $2, size_bytes = $3
+          WHERE id = $1 AND status = 'pending'`,
+        [assetId, observed.contentType, observed.sizeBytes],
+      );
+
+      return (result.rowCount ?? 0) > 0;
+    });
+  }
+
+  /** The upload was never made, or was not what it claimed to be. */
+  markOrphaned(studioId: string, assetId: string): Promise<void> {
+    return this.db.withTenant(studioId, async (tx) => {
+      await tx.query(`UPDATE assets SET status = 'orphaned' WHERE id = $1`, [assetId]);
+    });
+  }
+
   findById(studioId: string, assetId: string): Promise<Asset | null> {
     return this.db.withTenant(studioId, async (tx) => {
       const { rows } = await tx.query<AssetRow>(`SELECT ${COLUMNS} FROM assets WHERE id = $1`, [
