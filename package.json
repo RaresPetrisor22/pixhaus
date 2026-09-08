@@ -14,10 +14,11 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck",
     "build": "pnpm -r build",
-    "test": "pnpm -r test",
+    "test": "pnpm build:packages && pnpm -r test",
     "api": "pnpm --filter @pixhaus/api start",
     "db:migrate": "pnpm --filter @pixhaus/db migrate",
-    "db:status": "pnpm --filter @pixhaus/db migrate:status"
+    "db:status": "pnpm --filter @pixhaus/db migrate:status",
+    "build:packages": "pnpm --filter \"./packages/*\" build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
