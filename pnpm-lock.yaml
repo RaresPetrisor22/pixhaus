@@ -56,6 +56,9 @@ importers:
       '@node-rs/argon2':
         specifier: ^2.2.0
         version: 2.2.0
+      '@pixhaus/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       nodemailer:
         specifier: ^9.0.6
         version: 9.0.6

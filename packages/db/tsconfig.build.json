@@ -1,0 +1,15 @@
+{
+  // The migration runner is run by path (`node src/migrate.ts`) and stays
+  // type-stripped. Only what other packages import is compiled, because
+  // importing a .ts through node_modules is a hard error in Node:
+  // ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/index.ts", "src/tenant.ts"]
+}

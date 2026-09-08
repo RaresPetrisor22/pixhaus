@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Schema, migrations, and the migration runner",
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "migrate": "node src/migrate.ts up",
     "migrate:status": "node src/migrate.ts status",
     "typecheck": "tsc --noEmit",
@@ -15,5 +16,13 @@
   },
   "devDependencies": {
     "@types/pg": "^8.20.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   }
 }

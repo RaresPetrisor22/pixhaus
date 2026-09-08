@@ -35,8 +35,12 @@ RUN pnpm install --frozen-lockfile
 # ---------------------------------------------------------------------------
 FROM deps AS build
 COPY tsconfig.base.json ./
+COPY packages/db packages/db
 COPY apps/api apps/api
-RUN pnpm --filter @pixhaus/api build
+# packages/db first: apps/api imports the tenant wall from it, and a workspace
+# dependency has to exist as compiled .js before the dependent compiles against
+# its .d.ts. `-r` walks the graph in topological order, so this is one command.
+RUN pnpm -r build
 
 
 # ---------------------------------------------------------------------------
@@ -48,9 +52,13 @@ ENV NODE_ENV=production
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json apps/api/
-RUN pnpm install --frozen-lockfile --prod --filter @pixhaus/api
+COPY packages/db/package.json packages/db/
+# The trailing `...` means "and its workspace dependencies", which is what links
+# @pixhaus/db into node_modules.
+RUN pnpm install --frozen-lockfile --prod --filter @pixhaus/api...
 
 COPY --from=build /repo/apps/api/dist apps/api/dist
+COPY --from=build /repo/packages/db/dist packages/db/dist
 
 # The node image ships an unprivileged `node` user. Containers run as root
 # unless told otherwise, and this one has no reason to.
