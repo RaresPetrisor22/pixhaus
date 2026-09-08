@@ -2,23 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { HealthIndicatorService, type HealthIndicatorResult } from '@nestjs/terminus';
 import type pg from 'pg';
 
+import { describeError } from '../common/describe-error';
 import { PG_POOL } from '../database/pg-pool';
-
-/**
- * Connection failures often arrive as an AggregateError (one failure per
- * address the host resolved to) whose own `message` is empty, so unwrap it
- * rather than logging a blank line.
- */
-function describe(error: unknown): string {
-  if (error instanceof AggregateError) {
-    return error.errors.map(describe).join('; ');
-  }
-  if (error instanceof Error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    return error.message || code || error.name;
-  }
-  return String(error);
-}
 
 @Injectable()
 export class PostgresHealthIndicator {
@@ -39,7 +24,7 @@ export class PostgresHealthIndicator {
       // Full detail goes to the logs, where it can name the host, port and
       // role. The response body stays generic — /readyz is unauthenticated, so
       // it should not describe our infrastructure to whoever asks.
-      this.logger.error(`readiness check failed: ${describe(error)}`);
+      this.logger.error(`readiness check failed: ${describeError(error)}`);
       return check.down({ message: 'postgres unreachable' });
     }
   }

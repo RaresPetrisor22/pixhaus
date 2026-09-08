@@ -3,10 +3,11 @@ import { TerminusModule } from '@nestjs/terminus';
 
 import { HealthController } from './health.controller';
 import { PostgresHealthIndicator } from './postgres.health';
+import { StorageHealthIndicator } from './storage.health';
 
 @Module({
   imports: [TerminusModule],
   controllers: [HealthController],
-  providers: [PostgresHealthIndicator],
+  providers: [PostgresHealthIndicator, StorageHealthIndicator],
 })
 export class HealthModule {}

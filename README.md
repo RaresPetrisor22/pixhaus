@@ -56,10 +56,10 @@ serves the API on http://localhost:3000. No external accounts needed to try it.
 `--wait` blocks until every service passes its health check, so when the command returns the stack is
 genuinely ready rather than merely started.
 
-| Endpoint   | Answers                                                                                    |
-| ---------- | ------------------------------------------------------------------------------------------ |
-| `/healthz` | Is the process alive? Checks nothing else, so a database blip cannot cause a restart loop. |
-| `/readyz`  | Should this instance receive traffic? Checks Postgres; returns `503` when it cannot.       |
+| Endpoint   | Answers                                                                                              |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
+| `/healthz` | Is the process alive? Checks nothing else, so a database blip cannot cause a restart loop.           |
+| `/readyz`  | Should this instance receive traffic? Checks Postgres and object storage; `503` when either is down. |
 
 Photographer accounts work as of M1:
 
@@ -128,23 +128,36 @@ Clients (M3) will not have accounts at all; see
 
 ## Configuration
 
-| Variable                                    | Description                                                         |
-| ------------------------------------------- | ------------------------------------------------------------------- |
-| `STORAGE_ENDPOINT`                          | S3-compatible endpoint (MinIO, Cloudflare R2, Backblaze B2, Wasabi) |
-| `STORAGE_REGION`                            | Region string the SDK requires — value is provider-specific         |
-| `STORAGE_BUCKET`                            | Bucket name                                                         |
-| `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | Bucket credentials — scope them to this bucket only                 |
-| `STORAGE_FORCE_PATH_STYLE`                  | `true` for MinIO; provider-dependent otherwise                      |
-| `DATABASE_URL`                              | Postgres connection string                                          |
-| `REDIS_URL`                                 | Redis connection string                                             |
-| `SMTP_URL`                                  | Outgoing mail — magic links and verification                        |
-| `SMTP_FROM`                                 | From address on those emails                                        |
-| `APP_URL`                                   | Public origin, used to build links that go out in email             |
-| `SESSION_TTL_HOURS`                         | Session lifetime, slid forward on use (default 336 = 14 days)       |
-| `EMAIL_VERIFICATION_TTL_HOURS`              | Verification link lifetime (default 24)                             |
+| Variable                                    | Description                                                           |
+| ------------------------------------------- | --------------------------------------------------------------------- |
+| `STORAGE_ENDPOINT`                          | S3-compatible endpoint the API itself uses (MinIO, R2, B2, Wasabi)    |
+| `STORAGE_PUBLIC_ENDPOINT`                   | Endpoint baked into presigned URLs — see below. Defaults to the above |
+| `STORAGE_REGION`                            | Region string the SDK requires — value is provider-specific           |
+| `STORAGE_BUCKET`                            | Bucket name                                                           |
+| `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | Bucket credentials — scope them to this bucket only                   |
+| `STORAGE_FORCE_PATH_STYLE`                  | `true` for MinIO; provider-dependent otherwise                        |
+| `DATABASE_URL`                              | Postgres connection string                                            |
+| `REDIS_URL`                                 | Redis connection string                                               |
+| `SMTP_URL`                                  | Outgoing mail — magic links and verification                          |
+| `SMTP_FROM`                                 | From address on those emails                                          |
+| `APP_URL`                                   | Public origin, used to build links that go out in email               |
+| `SESSION_TTL_HOURS`                         | Session lifetime, slid forward on use (default 336 = 14 days)         |
+| `EMAIL_VERIFICATION_TTL_HOURS`              | Verification link lifetime (default 24)                               |
+| `UPLOAD_URL_TTL_SECONDS`                    | Presigned upload URL lifetime (default 900 = 15 min)                  |
+| `UPLOAD_MAX_BYTES`                          | Per-file upload ceiling (default 100 MiB)                             |
 
 Any S3-compatible provider works. R2 is recommended: no egress fees, which matters a lot when clients
 download multi-gigabyte galleries.
+
+**Two endpoints, and they are not interchangeable.** SigV4 signs the `Host` header, so a presigned URL
+cannot be re-pointed at a different origin after signing — it has to be signed with the origin whoever
+uses it will actually reach. `STORAGE_ENDPOINT` is how the API reaches the bucket (`minio:9000` inside
+compose); `STORAGE_PUBLIC_ENDPOINT` is what goes into presigned URLs handed to a browser
+(`localhost:9000`). In production both are the same public hostname and the distinction disappears.
+
+**The bucket needs CORS**, because the browser PUTs to it directly. Compose sets
+`MINIO_API_CORS_ALLOW_ORIGIN` for you. On a real provider, allow `PUT` and `GET` from your `APP_URL`
+with `content-type` and `content-length` in the allowed headers, and expose `etag`.
 
 ## Roadmap
 

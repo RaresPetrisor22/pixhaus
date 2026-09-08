@@ -4,6 +4,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 
 import { Public } from '../auth/public.decorator';
 import { PostgresHealthIndicator } from './postgres.health';
+import { StorageHealthIndicator } from './storage.health';
 
 /**
  * Two probes that answer two different questions.
@@ -16,6 +17,7 @@ export class HealthController {
   constructor(
     private readonly health: HealthCheckService,
     private readonly postgres: PostgresHealthIndicator,
+    private readonly storage: StorageHealthIndicator,
   ) {}
 
   /**
@@ -34,6 +36,9 @@ export class HealthController {
   @Get('readyz')
   @HealthCheck()
   readiness() {
-    return this.health.check([() => this.postgres.isHealthy('postgres')]);
+    return this.health.check([
+      () => this.postgres.isHealthy('postgres'),
+      () => this.storage.isHealthy('storage'),
+    ]);
   }
 }

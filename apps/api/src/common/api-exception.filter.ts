@@ -26,6 +26,11 @@ const CODE_BY_STATUS: Record<number, string> = {
   413: 'payload_too_large',
   422: 'unprocessable_entity',
   429: 'rate_limited',
+
+  // Terminus throws this when a readiness indicator is down. Without it the
+  // status falls through to `internal_error`, which says the API broke when in
+  // fact a dependency did.
+  503: 'service_unavailable',
 };
 
 @Catch()
