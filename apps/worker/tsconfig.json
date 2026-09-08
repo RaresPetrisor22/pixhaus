@@ -1,0 +1,20 @@
+{
+  // No build step, like packages/db's migration runner: this is plain
+  // TypeScript with no decorators, so Node strips the types and runs the source
+  // directly. That works because the entrypoint is run BY PATH — the
+  // node_modules restriction only applies to imports resolved by package name,
+  // and those (@pixhaus/db, @pixhaus/jobs) are compiled.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -171,6 +171,8 @@ services:
       # Not just minio: the bucket has to exist before /readyz can HEAD it.
       minio-init:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
     environment:
       NODE_ENV: production
@@ -189,6 +191,8 @@ services:
 
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-336}
       EMAIL_VERIFICATION_TTL_HOURS: ${EMAIL_VERIFICATION_TTL_HOURS:-24}
+
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
 
       STORAGE_ENDPOINT: http://minio:9000
       STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:${MINIO_PORT:-9000}}
@@ -214,6 +218,41 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+
+  # Consumes the rendition queue. No ports, no health check: it serves no
+  # traffic, and `docker compose up --wait` should not block on it.
+  worker:
+    build:
+      context: .
+      target: worker
+
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+    environment:
+      NODE_ENV: production
+
+      # The APP role, so RLS applies to the worker exactly as to the API.
+      DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:?set STORAGE_BUCKET in .env}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?set STORAGE_ACCESS_KEY in .env}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?set STORAGE_SECRET_KEY in .env}
+      STORAGE_FORCE_PATH_STYLE: ${STORAGE_FORCE_PATH_STYLE:-true}
+
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
 
 volumes:
   postgres-data:

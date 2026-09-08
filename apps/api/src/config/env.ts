@@ -27,6 +27,9 @@ export const envSchema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(336),
   EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().positive().default(24),
 
+  // Redis backs the job queue. Sessions stay in Postgres — see ADR 0003.
+  REDIS_URL: z.url(),
+
   STORAGE_ENDPOINT: z.url(),
 
   // What gets baked into a presigned URL. SigV4 signs the Host header, so a URL

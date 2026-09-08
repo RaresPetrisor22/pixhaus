@@ -3,6 +3,7 @@
 # One Dockerfile, two targets:
 #
 #   --target api      the HTTP server
+#   --target worker   the background job consumer
 #   --target migrate  a one-shot container that applies migrations and exits
 #
 # They share the dependency install, so the second costs almost nothing.
@@ -26,7 +27,9 @@ WORKDIR /repo
 FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json apps/api/
+COPY apps/worker/package.json apps/worker/
 COPY packages/db/package.json packages/db/
+COPY packages/jobs/package.json packages/jobs/
 RUN pnpm install --frozen-lockfile
 
 
@@ -36,6 +39,7 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS build
 COPY tsconfig.base.json ./
 COPY packages/db packages/db
+COPY packages/jobs packages/jobs
 COPY apps/api apps/api
 # packages/db first: apps/api imports the tenant wall from it, and a workspace
 # dependency has to exist as compiled .js before the dependent compiles against
@@ -53,12 +57,14 @@ ENV NODE_ENV=production
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY packages/db/package.json packages/db/
+COPY packages/jobs/package.json packages/jobs/
 # The trailing `...` means "and its workspace dependencies", which is what links
-# @pixhaus/db into node_modules.
+# @pixhaus/db and @pixhaus/jobs into node_modules.
 RUN pnpm install --frozen-lockfile --prod --filter @pixhaus/api...
 
 COPY --from=build /repo/apps/api/dist apps/api/dist
 COPY --from=build /repo/packages/db/dist packages/db/dist
+COPY --from=build /repo/packages/jobs/dist packages/jobs/dist
 
 # The node image ships an unprivileged `node` user. Containers run as root
 # unless told otherwise, and this one has no reason to.
@@ -66,6 +72,30 @@ USER node
 
 EXPOSE 3000
 CMD ["node", "apps/api/dist/main.js"]
+
+
+# ---------------------------------------------------------------------------
+# worker — the job consumer.
+#
+# No build stage for its own source: like the migration runner, it is plain
+# TypeScript.
+# ---------------------------------------------------------------------------
+FROM base AS worker
+ENV NODE_ENV=production
+
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/worker/package.json apps/worker/
+COPY packages/db/package.json packages/db/
+COPY packages/jobs/package.json packages/jobs/
+RUN pnpm install --frozen-lockfile --prod --filter @pixhaus/worker...
+
+COPY apps/worker/src apps/worker/src
+COPY --from=build /repo/packages/db/dist packages/db/dist
+COPY --from=build /repo/packages/jobs/dist packages/jobs/dist
+
+USER node
+
+CMD ["node", "apps/worker/src/main.ts"]
 
 
 # ---------------------------------------------------------------------------

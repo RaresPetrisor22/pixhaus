@@ -56,10 +56,10 @@ serves the API on http://localhost:3000. No external accounts needed to try it.
 `--wait` blocks until every service passes its health check, so when the command returns the stack is
 genuinely ready rather than merely started.
 
-| Endpoint   | Answers                                                                                              |
-| ---------- | ---------------------------------------------------------------------------------------------------- |
-| `/healthz` | Is the process alive? Checks nothing else, so a database blip cannot cause a restart loop.           |
-| `/readyz`  | Should this instance receive traffic? Checks Postgres and object storage; `503` when either is down. |
+| Endpoint   | Answers                                                                                                  |
+| ---------- | -------------------------------------------------------------------------------------------------------- |
+| `/healthz` | Is the process alive? Checks nothing else, so a database blip cannot cause a restart loop.               |
+| `/readyz`  | Should this instance receive traffic? Checks Postgres, Redis and object storage; `503` when any is down. |
 
 Photographer accounts work as of M1:
 
@@ -104,7 +104,15 @@ reachable, and skips it with a message when it is not.
 > **Editing `docker/postgres/init/`?** It runs once, on an empty data volume. Re-run it with
 > `docker compose down -v && docker compose up -d --wait`.
 
-The worker and frontend are not built yet — see the [roadmap](#roadmap).
+The worker runs as its own compose service and consumes the rendition queue:
+
+```bash
+docker compose logs -f worker
+```
+
+Run it on the host instead with `pnpm --filter @pixhaus/worker start`, after `docker compose stop worker`.
+
+The frontend is not built yet — see the [roadmap](#roadmap).
 
 ## How auth works
 

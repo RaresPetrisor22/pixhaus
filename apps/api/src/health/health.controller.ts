@@ -4,6 +4,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 
 import { Public } from '../auth/public.decorator';
 import { PostgresHealthIndicator } from './postgres.health';
+import { RedisHealthIndicator } from './redis.health';
 import { StorageHealthIndicator } from './storage.health';
 
 /**
@@ -18,6 +19,7 @@ export class HealthController {
     private readonly health: HealthCheckService,
     private readonly postgres: PostgresHealthIndicator,
     private readonly storage: StorageHealthIndicator,
+    private readonly redis: RedisHealthIndicator,
   ) {}
 
   /**
@@ -39,6 +41,7 @@ export class HealthController {
     return this.health.check([
       () => this.postgres.isHealthy('postgres'),
       () => this.storage.isHealthy('storage'),
+      () => this.redis.isHealthy('redis'),
     ]);
   }
 }

@@ -1,0 +1,21 @@
+{
+  "name": "@pixhaus/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Background jobs — rendition generation",
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pixhaus/db": "workspace:*",
+    "@pixhaus/jobs": "workspace:*",
+    "bullmq": "^5.63.0",
+    "ioredis": "^5.9.0",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.0"
+  }
+}

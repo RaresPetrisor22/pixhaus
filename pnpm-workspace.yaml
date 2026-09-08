@@ -1,3 +1,12 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+
+# Postinstall scripts pnpm will not run without an explicit decision here.
+#
+# msgpackr-extract is an optional native accelerator for msgpackr, which BullMQ
+# uses to serialise job payloads. Declined: our payloads are two UUIDs, so the
+# pure-JS fallback costs nothing measurable, and it keeps the "no compiler
+# required" property that picked @node-rs/argon2 over node-argon2.
+allowBuilds:
+  msgpackr-extract: false

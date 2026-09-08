@@ -6,6 +6,7 @@ import type { StudioUserPrincipal } from '../auth/principal';
 import { authorize } from '../authz/authorize';
 import { ApiException } from '../common/api-exception';
 import { GalleriesRepository } from '../galleries/galleries.repository';
+import { QueueService } from '../queue/queue.service';
 import { originalKey } from '../storage/storage-key';
 import { StorageService } from '../storage/storage.service';
 import { isAcceptedContentType, ACCEPTED_CONTENT_TYPES } from './content-types';
@@ -35,6 +36,7 @@ export class UploadsService {
     private readonly galleries: GalleriesRepository,
     private readonly assets: UploadsRepository,
     private readonly storage: StorageService,
+    private readonly queue: QueueService,
   ) {}
 
   async createUpload(
@@ -163,6 +165,8 @@ export class UploadsService {
         'This upload has already been finalized.',
       );
     }
+
+    await this.queue.enqueueRendition({ assetId, studioId: principal.studioId });
 
     return { assetId, status: 'uploaded', contentType, sizeBytes: head.sizeBytes };
   }

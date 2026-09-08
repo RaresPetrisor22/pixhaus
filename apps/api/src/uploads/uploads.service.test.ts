@@ -4,6 +4,7 @@ import { describe, test } from 'node:test';
 import type { StudioUserPrincipal } from '../auth/principal';
 import type { ApiException } from '../common/api-exception';
 import type { Gallery, GalleriesRepository } from '../galleries/galleries.repository';
+import type { QueueService } from '../queue/queue.service';
 import type { StorageService } from '../storage/storage.service';
 import type { Asset, NewAsset, UploadsRepository } from './uploads.repository';
 import { MAGIC_BYTES_NEEDED } from './magic-bytes';
@@ -58,7 +59,9 @@ function build(
     },
   } as unknown as StorageService;
 
-  return { service: new UploadsService(galleries, assets, storage), created, presigned };
+  const queue = { enqueueRendition: () => Promise.resolve() } as unknown as QueueService;
+
+  return { service: new UploadsService(galleries, assets, storage, queue), created, presigned };
 }
 
 async function failure(run: () => Promise<unknown>): Promise<{ code: string; status: number }> {
@@ -274,8 +277,17 @@ function buildFinalize(options: {
 
   const galleries = { findById: () => Promise.resolve(null) } as unknown as GalleriesRepository;
 
+  const enqueued: { assetId: string; studioId: string }[] = [];
+  const queue = {
+    enqueueRendition: (job: { assetId: string; studioId: string }) => {
+      enqueued.push(job);
+      return Promise.resolve();
+    },
+  } as unknown as QueueService;
+
   return {
-    service: new UploadsService(galleries, assets, storage),
+    service: new UploadsService(galleries, assets, storage, queue),
+    enqueued,
     removed,
     orphaned,
     uploaded,
@@ -315,6 +327,14 @@ describe('finalize — the happy path', () => {
     await service.finalize(verified, ASSET);
 
     assert.equal(uploaded[0].contentType, 'image/png');
+  });
+
+  test('enqueues the rendition job, keyed for the worker to scope its tenant', async () => {
+    const { service, enqueued } = buildFinalize({});
+
+    await service.finalize(verified, ASSET);
+
+    assert.deepEqual(enqueued, [{ assetId: ASSET, studioId: STUDIO }]);
   });
 
   test('the size recorded is the HEAD size, not the declared one', async () => {
@@ -365,6 +385,17 @@ describe('finalize — rejections', () => {
     });
     assert.deepEqual(orphaned, [], 'still pending — the URL may yet be used');
     assert.deepEqual(removed, []);
+  });
+
+  test('a rejected upload enqueues nothing', async () => {
+    const { service, enqueued } = buildFinalize({
+      bytes: TEXT,
+      head: { sizeBytes: TEXT.length, contentType: 'image/jpeg', etag: 'x' },
+    });
+
+    await failure(() => service.finalize(verified, ASSET));
+
+    assert.deepEqual(enqueued, []);
   });
 
   test('a text file named .jpg is rejected AND its bytes are deleted', async () => {

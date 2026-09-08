@@ -118,8 +118,14 @@ jobs:
       #
       # `--wait` blocks until the api health check passes, so a container that
       # boots but cannot reach Postgres fails the job rather than passing it.
+      # `up --wait` with no service brings up everything, worker included, so a
+      # worker that cannot reach Redis or Postgres fails the job.
       - name: Containerised stack comes up healthy
-        run: docker compose up -d --wait api
+        run: docker compose up -d --wait
+
+      - name: Worker is consuming its queue
+        run: |
+          docker compose logs worker | grep -q 'worker listening on "renditions"'
 
       - name: Probe the health endpoints
         run: |

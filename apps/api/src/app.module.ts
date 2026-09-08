@@ -11,6 +11,7 @@ import { DatabaseModule } from './database/database.module';
 import { GalleriesModule } from './galleries/galleries.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
+import { QueueModule } from './queue/queue.module';
 import { StorageModule } from './storage/storage.module';
 import { UploadsModule } from './uploads/uploads.module';
 
@@ -36,6 +37,7 @@ import { UploadsModule } from './uploads/uploads.module';
     HealthModule,
     MailModule,
     StorageModule,
+    QueueModule,
     AuthModule,
     GalleriesModule,
     UploadsModule,
