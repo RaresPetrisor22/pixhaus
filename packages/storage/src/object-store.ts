@@ -115,18 +115,32 @@ export class ObjectStore {
     );
   }
 
-  /** Returns the keys it could not delete rather than throwing. */
+  /**
+   * Throws unless every key is gone. Quiet mode would hide per-key failures
+   * behind a successful request, which is how a caller ends up recording a
+   * delete that never happened.
+   */
   async remove(keys: string[]): Promise<void> {
     if (keys.length === 0) {
       return;
     }
 
-    await this.client.send(
+    const result = await this.client.send(
       new DeleteObjectsCommand({
         Bucket: this.bucket,
-        Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+        Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: false },
       }),
     );
+
+    const failed = result.Errors ?? [];
+
+    if (failed.length > 0) {
+      throw new Error(
+        `failed to delete ${failed.length} object(s): ${failed
+          .map((error) => `${error.Key} (${error.Code})`)
+          .join(', ')}`,
+      );
+    }
   }
 
   /** Readiness: can we reach the bucket, and does it exist. */

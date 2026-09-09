@@ -82,9 +82,11 @@ await reaperQueue.upsertJobScheduler(REAPER_SCHEDULER_ID, REAPER_REPEAT);
 const reaper = new Worker(
   REAPER_QUEUE,
   async () => {
-    const { swept, studios } = await handleReaper(pool, store);
-    if (swept > 0) {
-      console.log(`reaper: orphaned ${swept} pending asset(s) across ${studios} studio(s)`);
+    const { orphaned, deleted, studios } = await handleReaper(pool, store);
+    if (orphaned > 0 || deleted > 0) {
+      console.log(
+        `reaper: orphaned ${orphaned}, deleted objects for ${deleted}, across ${studios} studio(s)`,
+      );
     }
   },
   { connection, concurrency: 1 },
