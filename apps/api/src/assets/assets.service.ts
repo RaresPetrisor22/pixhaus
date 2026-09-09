@@ -4,8 +4,10 @@ import type { RenditionKind } from '@pixhaus/storage';
 import type { StudioUserPrincipal } from '../auth/principal';
 import { authorize } from '../authz/authorize';
 import { ApiException } from '../common/api-exception';
+import { GalleriesRepository } from '../galleries/galleries.repository';
 import { StorageService } from '../storage/storage.service';
-import { AssetsRepository } from './assets.repository';
+import { AssetsRepository, type AssetPage } from './assets.repository';
+import type { ListAssetsInput } from './assets.schemas';
 
 /**
  * How long the URL a browser is redirected to stays valid.
@@ -20,8 +22,65 @@ export const RENDITION_URL_TTL_SECONDS = 300;
 export class AssetsService {
   constructor(
     private readonly assets: AssetsRepository,
+    private readonly galleries: GalleriesRepository,
     private readonly storage: StorageService,
   ) {}
+
+  async list(
+    principal: StudioUserPrincipal,
+    galleryId: string,
+    query: ListAssetsInput,
+  ): Promise<AssetPage> {
+    const gallery = await this.galleries.findById(principal.studioId, galleryId);
+
+    if (!gallery) {
+      throw new ApiException(HttpStatus.NOT_FOUND, 'gallery_not_found', 'No such gallery.');
+    }
+
+    const decision = authorize(principal, 'gallery.view', {
+      kind: 'gallery',
+      studioId: principal.studioId,
+      status: gallery.status,
+    });
+
+    if (!decision.allow) {
+      throw new ApiException(HttpStatus.FORBIDDEN, 'forbidden', 'Not allowed.');
+    }
+
+    return this.assets.list(principal.studioId, galleryId, query.limit, query.cursor);
+  }
+
+  async remove(principal: StudioUserPrincipal, assetId: string): Promise<void> {
+    const objects = await this.assets.findObjects(principal.studioId, assetId);
+
+    if (!objects) {
+      throw new ApiException(HttpStatus.NOT_FOUND, 'asset_not_found', 'No such asset.');
+    }
+
+    const decision = authorize(principal, 'gallery.manage', {
+      kind: 'gallery',
+      studioId: principal.studioId,
+      status: objects.galleryStatus,
+    });
+
+    if (!decision.allow) {
+      if (decision.reason === 'email_unverified') {
+        throw new ApiException(
+          HttpStatus.FORBIDDEN,
+          'email_unverified',
+          'Verify your email address before deleting photos.',
+        );
+      }
+
+      throw new ApiException(HttpStatus.FORBIDDEN, 'forbidden', 'Not allowed.');
+    }
+
+    if (!(await this.assets.delete(principal.studioId, assetId))) {
+      throw new ApiException(HttpStatus.NOT_FOUND, 'asset_not_found', 'No such asset.');
+    }
+
+    await this.storage.remove([objects.storageKey, ...objects.renditionKeys]);
+  }
 
   /**
    * The bytes never come through here — the caller is redirected at the bucket

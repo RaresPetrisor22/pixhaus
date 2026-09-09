@@ -1,15 +1,14 @@
 import { Module } from '@nestjs/common';
 
-import { AssetsController } from './assets.controller';
+import { GalleriesModule } from '../galleries/galleries.module';
+import { AssetsController, GalleryAssetsController } from './assets.controller';
 import { AssetsRepository } from './assets.repository';
 import { AssetsService } from './assets.service';
 
-/**
- * Reading assets, as opposed to creating them — that is UploadsModule.
- * StorageModule is @Global, so it is not imported.
- */
+/** Reading and deleting assets. Creating them is UploadsModule. */
 @Module({
-  controllers: [AssetsController],
+  imports: [GalleriesModule],
+  controllers: [GalleryAssetsController, AssetsController],
   providers: [AssetsService, AssetsRepository],
   exports: [AssetsRepository],
 })

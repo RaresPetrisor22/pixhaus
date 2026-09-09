@@ -1,12 +1,20 @@
-import { RENDITIONS_QUEUE, type RenditionJob } from '@pixhaus/jobs';
+import {
+  REAPER_JOB_OPTIONS,
+  REAPER_QUEUE,
+  REAPER_REPEAT,
+  REAPER_SCHEDULER_ID,
+  RENDITIONS_QUEUE,
+  type RenditionJob,
+} from '@pixhaus/jobs';
 import { createObjectStore } from '@pixhaus/storage';
-import { Worker } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import pg from 'pg';
 import sharp from 'sharp';
 
 import { markAssetFailed } from './assets.repository.ts';
 import { readEnv } from './env.ts';
+import { handleReaper } from './reaper.handler.ts';
 import { handleRendition } from './renditions.handler.ts';
 
 const env = readEnv();
@@ -60,7 +68,33 @@ worker.on('failed', (job, error) => {
 // Fires when Redis itself is unreachable, not when a job fails.
 worker.on('error', (error) => console.error(`worker error: ${error.message}`));
 
+/**
+ * The reaper. Scheduled here rather than by the API: it is the worker's own
+ * housekeeping, and upsert means restarting does not stack duplicates.
+ */
+const reaperQueue = new Queue(REAPER_QUEUE, {
+  connection,
+  defaultJobOptions: REAPER_JOB_OPTIONS,
+});
+
+await reaperQueue.upsertJobScheduler(REAPER_SCHEDULER_ID, REAPER_REPEAT);
+
+const reaper = new Worker(
+  REAPER_QUEUE,
+  async () => {
+    const { swept, studios } = await handleReaper(pool, store);
+    if (swept > 0) {
+      console.log(`reaper: orphaned ${swept} pending asset(s) across ${studios} studio(s)`);
+    }
+  },
+  { connection, concurrency: 1 },
+);
+
+reaper.on('failed', (job, error) => console.error(`reaper failed (${job?.id}): ${error.message}`));
+reaper.on('error', (error) => console.error(`reaper error: ${error.message}`));
+
 console.log(`worker listening on "${RENDITIONS_QUEUE}", concurrency ${env.concurrency}`);
+console.log(`reaper scheduled on "${REAPER_QUEUE}" (${REAPER_REPEAT.pattern})`);
 
 /**
  * Graceful shutdown. worker.close() lets in-flight jobs finish rather than
@@ -69,6 +103,8 @@ console.log(`worker listening on "${RENDITIONS_QUEUE}", concurrency ${env.concur
 async function shutdown(signal: string): Promise<void> {
   console.log(`${signal} received, finishing in-flight jobs`);
   await worker.close();
+  await reaper.close();
+  await reaperQueue.close();
   await pool.end();
   connection.disconnect();
   process.exit(0);
