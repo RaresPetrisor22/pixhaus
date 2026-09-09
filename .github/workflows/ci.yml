@@ -39,22 +39,17 @@ jobs:
 
       # packages/db/src/rls.test.ts skips itself without a reachable database,
       # so without this the tenant-isolation suite would pass by not running.
-      # Redis and MinIO come up alongside it for the same reason.
-      - name: Start Postgres, Redis and MinIO, then migrate
+      # Redis and MinIO are not started: nothing in the suite talks to them yet.
+      - name: Start Postgres and migrate
         run: |
           cp .env.example .env
-          docker compose up -d --wait postgres redis minio minio-init
+          docker compose up -d --wait postgres
           pnpm db:migrate
 
       - run: pnpm test
         env:
           TEST_DATABASE_URL: postgresql://pixhaus_app:dev_app_password@localhost:5432/pixhaus
           MIGRATION_DATABASE_URL: postgresql://pixhaus_owner:dev_owner_password@localhost:5432/pixhaus
-          REDIS_URL: redis://:dev_redis_password@localhost:6379
-          STORAGE_ENDPOINT: http://localhost:9000
-          STORAGE_BUCKET: pixhaus
-          STORAGE_ACCESS_KEY: pixhaus_dev_access_key
-          STORAGE_SECRET_KEY: pixhaus_dev_secret_key
 
   migrate:
     name: Migrations apply to an empty database
