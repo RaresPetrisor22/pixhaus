@@ -73,6 +73,25 @@ Photographer accounts work as of M1:
 | `DELETE` | `/api/auth/sessions`            | session |
 | `GET`    | `/api/auth/me`                  | session |
 
+Galleries, uploads and renditions work as of M2:
+
+| Method   | Route                                   | Auth    |
+| -------- | --------------------------------------- | ------- |
+| `POST`   | `/api/galleries`                        | session |
+| `GET`    | `/api/galleries`                        | session |
+| `GET`    | `/api/galleries/:galleryId`             | session |
+| `PATCH`  | `/api/galleries/:galleryId`             | session |
+| `DELETE` | `/api/galleries/:galleryId`             | session |
+| `POST`   | `/api/galleries/:galleryId/uploads`     | session |
+| `POST`   | `/api/uploads/:assetId/finalize`        | session |
+| `GET`    | `/api/galleries/:galleryId/assets`      | session |
+| `DELETE` | `/api/assets/:assetId`                  | session |
+| `GET`    | `/api/assets/:assetId/renditions/:kind` | session |
+
+Upload is three calls: mint a presigned PUT, PUT the bytes straight to the bucket, then finalize —
+which is where the server goes and looks at what actually landed. A background worker then writes
+`thumb`, `grid` and `preview` renditions plus a blurhash placeholder.
+
 Outgoing mail lands in Mailpit at http://localhost:8025; in development the verification link is also
 written to the API log. Full detail in [`docs/api.md`](docs/api.md).
 
@@ -153,6 +172,11 @@ Clients (M3) will not have accounts at all; see
 | `EMAIL_VERIFICATION_TTL_HOURS`              | Verification link lifetime (default 24)                               |
 | `UPLOAD_URL_TTL_SECONDS`                    | Presigned upload URL lifetime (default 900 = 15 min)                  |
 | `UPLOAD_MAX_BYTES`                          | Per-file upload ceiling (default 100 MiB)                             |
+| `REDIS_URL`                                 | Redis connection string — backs the job queue                         |
+| `WORKER_CONCURRENCY`                        | Renditions processed at once (default 2)                              |
+
+Raising `WORKER_CONCURRENCY` past 4 also needs `UV_THREADPOOL_SIZE` raised to match: libvips runs on
+libuv's pool, and that is what caps how many images are processed in parallel.
 
 Any S3-compatible provider works. R2 is recommended: no egress fees, which matters a lot when clients
 download multi-gigabyte galleries.
@@ -171,7 +195,7 @@ with `content-type` and `content-length` in the allowed headers, and expose `eta
 
 - [x] M0 — Scaffold, Docker Compose, CI
 - [x] M1 — Photographer accounts
-- [ ] M2 — Galleries and upload pipeline
+- [x] M2 — Galleries and upload pipeline
 - [ ] M3 — Share links, client gallery, downloads
 - [ ] M4 — Bulk zip
 - [ ] M5 — Favorites and selections

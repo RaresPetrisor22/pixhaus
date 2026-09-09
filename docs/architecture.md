@@ -180,24 +180,27 @@ sequenceDiagram
     OBJ-->>API: size, etag
     API->>OBJ: GET first bytes
     OBJ-->>API: magic bytes
-    API->>API: verify size + real image + hash<br/>never trust the client's claim
-    API->>PG: UPDATE asset status=uploaded, content_hash
-    API->>Q: enqueue derive(asset_id)<br/>idempotency key = hash + rendition spec
+    API->>API: verify size + real image<br/>never trust the client's claim
+    API->>PG: UPDATE asset status=uploaded, content_type, size_bytes
+    API->>Q: enqueue derive(asset_id)<br/>jobId = asset_id, so a double finalize enqueues once
     API-->>PH: 202 Accepted
 
     Q->>WK: dequeue
     WK->>OBJ: GET original
-    WK->>WK: libvips — ICC to sRGB, thumb/grid/preview,<br/>strip EXIF from derivatives
+    WK->>WK: SHA-256 while streaming, then libvips —<br/>ICC to sRGB, thumb/grid/preview, strip EXIF
     WK->>OBJ: PUT renditions
-    WK->>PG: INSERT renditions, asset status=ready
+    WK->>PG: INSERT renditions ON CONFLICT (asset_id, kind),<br/>asset content_hash/width/height/blurhash, status=ready
 ```
 
 The finalize step is the whole trust boundary. Because bytes never pass through the API, the server has
 no idea what actually landed in the bucket — so it has to go look. Skip this and you've built an open
 file host for anyone who can request an upload URL.
 
-The presigned PUT is scoped three ways: a key prefix (they can't write outside their own path), a
-`content-length-range` (they can't upload a 40GB file), and a short expiry.
+The presigned PUT is scoped three ways: a key prefix (they can't write outside their own path), an
+exact signed `content-length` (they can't upload a 40GB file), and a short expiry.
+
+`content_hash` is computed by the worker, not at finalize — it already streams the whole original, so
+hashing there is free. See [ADR 0002](adr/0002-direct-to-storage-upload-with-server-side-finalize.md).
 
 ---
 
@@ -279,6 +282,10 @@ stateDiagram-v2
     orphaned --> [*]
 ```
 
+The reaper flips the status before deleting the objects, so an upload that finalizes mid-sweep keeps
+its bytes. It then stamps `objects_deleted_at`; anything orphaned but unstamped is swept again, which
+is what makes a failed delete recoverable rather than a permanent leak.
+
 `orphaned` is the state people forget. Every presigned upload URL you hand out is a row that may never
 be finalized — the browser closed, the wifi died, someone was probing your API. Without a reaper you
 accumulate rows pointing at objects that may or may not exist, and you pay to store them forever.
@@ -287,17 +294,17 @@ accumulate rows pointing at objects that may or may not exist, and you pay to st
 
 ## Threat model
 
-| Threat                                | Mitigation                                                                                                   |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Upload URL abused as a free file host | Key prefix + `content-length-range` + short expiry; server-side magic-byte and size verification at finalize |
-| Client shares gallery link publicly   | Grants expire; email-gated magic link; revocation epoch; per-grant rate limits on mint                       |
-| Guessing another gallery's assets     | Presigned URLs minted only after `authorize()`; asset IDs are UUIDs; tenant predicate on every query         |
-| Revoked client keeps their token      | Short token TTL bounds the window; Redis denylist for immediate kill                                         |
-| Cross-tenant data leak                | `studio_id` on every row; RLS policies; `TenantDb.withTenant` is the only way to get a client                |
-| Stolen session cookie                 | `HttpOnly` + `SameSite=Lax`; DB stores only its SHA-256; revocable by row delete                             |
-| Credential stuffing                   | argon2id; identical answer and timing for unknown email vs wrong password; per-IP **and** per-email limits   |
-| Stolen preview reveals location       | EXIF stripped from all derivatives; originals retain it                                                      |
-| Worker retry duplicates work          | Idempotency key = content hash + rendition spec                                                              |
+| Threat                                | Mitigation                                                                                                          |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Upload URL abused as a free file host | Key prefix + exact signed `content-length` + short expiry; server-side magic-byte and size verification at finalize |
+| Client shares gallery link publicly   | Grants expire; email-gated magic link; revocation epoch; per-grant rate limits on mint                              |
+| Guessing another gallery's assets     | Presigned URLs minted only after `authorize()`; asset IDs are UUIDs; tenant predicate on every query                |
+| Revoked client keeps their token      | Short token TTL bounds the window; Redis denylist for immediate kill                                                |
+| Cross-tenant data leak                | `studio_id` on every row; RLS policies; `TenantDb.withTenant` is the only way to get a client                       |
+| Stolen session cookie                 | `HttpOnly` + `SameSite=Lax`; DB stores only its SHA-256; revocable by row delete                                    |
+| Credential stuffing                   | argon2id; identical answer and timing for unknown email vs wrong password; per-IP **and** per-email limits          |
+| Stolen preview reveals location       | EXIF stripped from all derivatives; originals retain it                                                             |
+| Worker retry duplicates work          | `jobId` = asset id on enqueue; renditions upserted on `(asset_id, kind)`; deterministic object keys                 |
 
 ## Not built (deliberately)
 

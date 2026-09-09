@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-05
+- **Amended:** 2026-09-09 — step 3 no longer computes the hash; see the note there.
 - **Affects:** `assets` and its lifecycle, the upload API, the storage interface, the worker
 
 ## Context
@@ -24,11 +25,19 @@ itself.
    client's declared filename, size, and type scope that URL only; they are not recorded as facts.
 2. Browser PUTs the bytes. Never touches the API.
 3. `POST /api/uploads/:assetId/finalize` — **the trust boundary.** `HEAD` for real size, ranged `GET`
-   for magic bytes, compute a hash. Only what the server observed is written. Status → `uploaded`,
-   rendition job enqueued.
+   for magic bytes. Only what the server observed is written. Status → `uploaded`, rendition job
+   enqueued.
+
+> **Amended 2026-09-09.** Step 3 originally computed `content_hash` here. The worker does it instead:
+> it already streams the whole original, so hashing there is free, whereas hashing at finalize would
+> pull every 40 MB file back through the API — the one cost this ADR exists to avoid. `content_hash`
+> stays NULL until the worker writes it, alongside `width`, `height` and `blurhash`.
 
 The presigned URL is scoped three ways: **key prefix** (can't write outside their path),
-**`content-length-range`** (can't upload 40 GB), **short expiry** (a leaked URL dies in 15 min).
+**exact `content-length`** (can't upload 40 GB), **short expiry** (a leaked URL dies in 15 min).
+
+Presigned PUT signs `content-length` as an exact value rather than a range — `content-length-range` is
+a POST-policy condition. Finalize's `HEAD` is the real ceiling either way.
 
 **Finalize is not optional.** Without it, anyone who can get an upload URL can store arbitrary
 content and have it recorded as a photo. This is enforced structurally: every server-observable
@@ -58,5 +67,5 @@ stays NULL until finalize.
 - Every presigned URL is a row that may never be finalized. The `orphaned` status and the partial
   index `(created_at) WHERE status = 'pending'` exist for this; the reaper is load-bearing.
 - The bucket needs CORS configured.
-- The provider must support presigned PUT with a content-length-range condition.
+- The provider must support presigned PUT with signed `content-length` and `content-type` headers.
 - Finalize costs a round trip to storage — cheap next to what it replaces, not free.
