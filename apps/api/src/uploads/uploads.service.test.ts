@@ -367,6 +367,15 @@ describe('finalize — rejections', () => {
     });
   });
 
+  test('an asset the reaper swept says so, rather than "already finalized"', async () => {
+    const { service } = buildFinalize({ asset: pendingAsset({ status: 'orphaned' }) });
+
+    assert.deepEqual(await failure(() => service.finalize(verified, ASSET)), {
+      code: 'upload_expired',
+      status: 409,
+    });
+  });
+
   test('a concurrent finalize loses at the guarded UPDATE', async () => {
     const { service } = buildFinalize({ markUploadedWins: false });
 

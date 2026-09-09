@@ -119,6 +119,15 @@ export class UploadsService {
       throw new ApiException(HttpStatus.NOT_FOUND, 'asset_not_found', 'No such upload.');
     }
 
+    // The reaper got here first — the row is a tombstone and the bytes are gone.
+    if (asset.status === 'orphaned') {
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        'upload_expired',
+        'This upload was abandoned and has been cleaned up. Start a new one.',
+      );
+    }
+
     if (asset.status !== 'pending') {
       throw new ApiException(
         HttpStatus.CONFLICT,

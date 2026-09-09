@@ -117,7 +117,13 @@ export class AssetsRepository {
     });
   }
 
-  /** Keyset on (position, id) — the order assets_gallery_position_idx stores. */
+  /**
+   * Keyset on (position, id) — the order assets_gallery_position_idx stores.
+   *
+   * `orphaned` is hidden: the bytes are gone and the row is only a tombstone.
+   * `pending` and `failed` stay visible so an upload in flight or one the
+   * worker gave up on is something the photographer can see and act on.
+   */
   list(studioId: string, galleryId: string, limit: number, rawCursor?: string): Promise<AssetPage> {
     const cursor = decodeCursor(rawCursor);
 
@@ -126,14 +132,15 @@ export class AssetsRepository {
       const { rows } = cursor
         ? await tx.query<AssetRow>(
             `SELECT ${LIST_COLUMNS} FROM assets
-              WHERE gallery_id = $1 AND (position, id) > ($2::integer, $3::uuid)
+              WHERE gallery_id = $1 AND status <> 'orphaned'
+                AND (position, id) > ($2::integer, $3::uuid)
               ORDER BY position, id
               LIMIT $4`,
             [galleryId, cursor.sort, cursor.id, limit + 1],
           )
         : await tx.query<AssetRow>(
             `SELECT ${LIST_COLUMNS} FROM assets
-              WHERE gallery_id = $1
+              WHERE gallery_id = $1 AND status <> 'orphaned'
               ORDER BY position, id
               LIMIT $2`,
             [galleryId, limit + 1],
