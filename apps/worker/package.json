@@ -5,16 +5,19 @@
   "type": "module",
   "description": "Background jobs — rendition generation",
   "scripts": {
-    "start": "node src/main.ts",
+    "start": "node --env-file-if-exists=../../.env src/main.ts",
+    "test": "node --test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@pixhaus/db": "workspace:*",
     "@pixhaus/jobs": "workspace:*",
     "@pixhaus/storage": "workspace:*",
+    "blurhash": "^2.0.5",
     "bullmq": "^5.63.0",
     "ioredis": "^5.9.0",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0"

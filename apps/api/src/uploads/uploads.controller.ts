@@ -34,7 +34,8 @@ export class UploadsController {
   constructor(private readonly uploads: UploadsService) {}
 
   // 202: the bytes are verified and recorded, but the renditions the caller
-  // ultimately wants are not made yet. M2.2 enqueues that job here.
+  // ultimately wants are not made yet — a job is enqueued and the worker
+  // answers for them at GET /api/assets/:assetId/renditions/:kind.
   @Post(':assetId/finalize')
   @HttpCode(HttpStatus.ACCEPTED)
   finalize(

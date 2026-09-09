@@ -1,8 +1,11 @@
 import { RENDITIONS_QUEUE, type RenditionJob } from '@pixhaus/jobs';
+import { createObjectStore } from '@pixhaus/storage';
 import { Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import pg from 'pg';
+import sharp from 'sharp';
 
+import { markAssetFailed } from './assets.repository.ts';
 import { readEnv } from './env.ts';
 import { handleRendition } from './renditions.handler.ts';
 
@@ -19,20 +22,39 @@ pool.on('error', (error) => console.error(`idle client error: ${error.message}`)
 // maxRetriesPerRequest: null is mandatory for a BullMQ Worker
 const connection = new Redis(env.redisUrl, { maxRetriesPerRequest: null });
 
+const store = createObjectStore(env.storage);
+
 /**
- * The consumer.
+ * cache(false) turns off libvips' operation cache. It exists to make repeated
+ * work on the same image cheap; a worker never sees the same image twice, so
+ * all it would do is hold decoded buffers alive after the job that made them.
  */
+sharp.concurrency(1);
+sharp.cache(false);
+
 const worker = new Worker<RenditionJob>(
   RENDITIONS_QUEUE,
-  async (job) => handleRendition(pool, job.data),
+  async (job) => handleRendition({ pool, store }, job.data),
   { connection, concurrency: env.concurrency },
 );
 
 worker.on('completed', (job) => console.log(`completed job ${job.id}`));
 
 worker.on('failed', (job, error) => {
-  const attempts = job ? `${job.attemptsMade}/${job.opts.attempts ?? 1}` : 'unknown';
-  console.error(`failed job ${job?.id} (attempt ${attempts}): ${error.message}`);
+  const attempts = job?.opts.attempts ?? 1;
+  console.error(
+    `failed job ${job?.id} (attempt ${job?.attemptsMade}/${attempts}): ${error.message}`,
+  );
+
+  if (job && job.attemptsMade >= attempts) {
+    void markAssetFailed(pool, job.data.studioId, job.data.assetId).catch((markError: unknown) =>
+      console.error(
+        `could not mark asset ${job.data.assetId} failed: ${
+          markError instanceof Error ? markError.message : String(markError)
+        }`,
+      ),
+    );
+  }
 });
 
 // Fires when Redis itself is unreachable, not when a job fails.
