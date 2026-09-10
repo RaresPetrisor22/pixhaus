@@ -59,6 +59,43 @@ function toAsset(row: AssetRow): Asset {
 }
 
 /**
+ * What a client sees: a ready photo, its shape, and the two sizes the grid
+ * needs, presigned by the caller. No content type, no byte count, no status —
+ * there is only one status a client can see.
+ */
+export type ClientAsset = {
+  id: string;
+  originalFilename: string;
+  width: number | null;
+  height: number | null;
+  blurhash: string | null;
+  thumbKey: string | null;
+  gridKey: string | null;
+};
+
+type ClientAssetRow = {
+  id: string;
+  original_filename: string;
+  width: number | null;
+  height: number | null;
+  blurhash: string | null;
+  position: number;
+  thumb_key: string | null;
+  grid_key: string | null;
+};
+
+export type ClientAssetPage = { assets: ClientAsset[]; nextCursor: string | null };
+
+/** What a download needs: the original's key, and the name to save it as. */
+export type AssetOriginal = {
+  assetStatus: AssetStatus;
+  galleryId: string;
+  galleryStatus: GalleryStatus;
+  storageKey: string;
+  originalFilename: string;
+};
+
+/**
  * One asset, the gallery that decides its rights, and the one rendition asked
  * for — which may not exist yet.
  */
@@ -92,6 +129,7 @@ export class AssetsRepository {
     studioId: string,
     assetId: string,
     kind: RenditionKind,
+    galleryId?: string,
   ): Promise<AssetRendition | null> {
     return this.db.withTenant(studioId, async (tx) => {
       const { rows } = await tx.query<AssetRenditionRow>(
@@ -103,8 +141,9 @@ export class AssetsRepository {
            FROM assets a
            JOIN galleries g ON g.id = a.gallery_id
       LEFT JOIN renditions r ON r.asset_id = a.id AND r.kind = $2
-          WHERE a.id = $1`,
-        [assetId, kind],
+          WHERE a.id = $1
+            AND ($3::uuid IS NULL OR a.gallery_id = $3)`,
+        [assetId, kind, galleryId ?? null],
       );
 
       const row = rows[0];
@@ -159,6 +198,92 @@ export class AssetsRepository {
         nextCursor:
           hasMore && last ? encodeCursor({ sort: String(last.position), id: last.id }) : null,
       };
+    });
+  }
+
+  /**
+   * The client's grid, in one round trip.
+   */
+  listReady(
+    studioId: string,
+    galleryId: string,
+    limit: number,
+    rawCursor?: string,
+  ): Promise<ClientAssetPage> {
+    const cursor = decodeCursor(rawCursor);
+
+    return this.db.withTenant(studioId, async (tx) => {
+      const { rows } = await tx.query<ClientAssetRow>(
+        `SELECT a.id, a.original_filename, a.width, a.height, a.blurhash, a.position,
+                t.storage_key AS thumb_key,
+                g.storage_key AS grid_key
+           FROM assets a
+      LEFT JOIN renditions t ON t.asset_id = a.id AND t.kind = 'thumb'
+      LEFT JOIN renditions g ON g.asset_id = a.id AND g.kind = 'grid'
+          WHERE a.gallery_id = $1 AND a.status = 'ready'
+            AND ($2::integer IS NULL OR (a.position, a.id) > ($2::integer, $3::uuid))
+          ORDER BY a.position, a.id
+          LIMIT $4`,
+        [galleryId, cursor?.sort ?? null, cursor?.id ?? null, limit + 1],
+      );
+
+      const hasMore = rows.length > limit;
+      const page = hasMore ? rows.slice(0, limit) : rows;
+      const last = page.at(-1);
+
+      return {
+        assets: page.map((row) => ({
+          id: row.id,
+          originalFilename: row.original_filename,
+          width: row.width,
+          height: row.height,
+          blurhash: row.blurhash,
+          thumbKey: row.thumb_key,
+          gridKey: row.grid_key,
+        })),
+        nextCursor:
+          hasMore && last ? encodeCursor({ sort: String(last.position), id: last.id }) : null,
+      };
+    });
+  }
+
+  /** The original, for a download. Scoped to one gallery for the client plane. */
+  findOriginal(
+    studioId: string,
+    assetId: string,
+    galleryId?: string,
+  ): Promise<AssetOriginal | null> {
+    return this.db.withTenant(studioId, async (tx) => {
+      const { rows } = await tx.query<{
+        asset_status: AssetStatus;
+        gallery_id: string;
+        gallery_status: GalleryStatus;
+        storage_key: string;
+        original_filename: string;
+      }>(
+        `SELECT a.status AS asset_status,
+                a.gallery_id,
+                g.status AS gallery_status,
+                a.storage_key,
+                a.original_filename
+           FROM assets a
+           JOIN galleries g ON g.id = a.gallery_id
+          WHERE a.id = $1
+            AND ($2::uuid IS NULL OR a.gallery_id = $2)`,
+        [assetId, galleryId ?? null],
+      );
+
+      const row = rows[0];
+
+      return row
+        ? {
+            assetStatus: row.asset_status,
+            galleryId: row.gallery_id,
+            galleryStatus: row.gallery_status,
+            storageKey: row.storage_key,
+            originalFilename: row.original_filename,
+          }
+        : null;
     });
   }
 
