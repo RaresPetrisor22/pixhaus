@@ -10,10 +10,11 @@ build/
 # Test output
 coverage/
 
-# Environment — .env.example is the tracked template, .env is yours
+# Environment — the *.example templates are tracked, .env is yours
 .env
 .env.*
 !.env.example
+!.env.production.example
 
 # Editors / OS
 .DS_Store

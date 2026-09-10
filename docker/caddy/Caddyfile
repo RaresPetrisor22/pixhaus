@@ -1,0 +1,27 @@
+# One site, one upstream.
+#
+# Naming the domain here is what makes Caddy request a certificate for it on
+# first request, and renew it thereafter. DOMAIN comes from the environment, so
+# this file is the same on every deployment.
+
+{$DOMAIN} {
+	reverse_proxy api:3000
+
+	# The API sets its own cache headers on presigned redirects; these are the
+	# ones it cannot set for itself.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Photos never come through here — the browser fetches them straight from
+	# object storage — so this only ever carries JSON.
+	encode gzip
+
+	log {
+		output stdout
+		format console
+	}
+}

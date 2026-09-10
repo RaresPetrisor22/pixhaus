@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -28,6 +28,7 @@ export type RegisteredStudio = {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly verificationTtlHours: number;
+  private readonly inviteCode: string | undefined;
 
   constructor(
     private readonly repository: AuthRepository,
@@ -36,12 +37,15 @@ export class AuthService {
     config: ConfigService<Env, true>,
   ) {
     this.verificationTtlHours = config.get('EMAIL_VERIFICATION_TTL_HOURS', { infer: true });
+    this.inviteCode = config.get('REGISTRATION_INVITE_CODE', { infer: true });
   }
 
   /**
    * Creates a studio and its first owner in one transaction.
    */
   async register(input: RegisterInput): Promise<RegisteredStudio> {
+    this.checkInvite(input.inviteCode);
+
     const passwordHash = await hashPassword(input.password);
     const studioId = randomUUID();
     const token = generateToken();
@@ -87,6 +91,29 @@ export class AuthService {
     }
 
     throw new Error(`could not find a free studio slug for "${base}" in ${SLUG_ATTEMPTS} attempts`);
+  }
+
+  /**
+   * Open when unconfigured, so development and the tests are unaffected.
+   *
+   * Rejected before the password is hashed: argon2id is deliberately expensive,
+   * and there is no reason to spend it on a caller who cannot register anyway.
+   */
+  private checkInvite(supplied: string | undefined): void {
+    if (!this.inviteCode) {
+      return;
+    }
+
+    const expected = Buffer.from(this.inviteCode);
+    const given = Buffer.from(supplied ?? '');
+
+    if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
+      throw new ApiException(
+        HttpStatus.FORBIDDEN,
+        'invite_required',
+        'Registration is invite-only. Ask for a code to create a studio.',
+      );
+    }
   }
 
   /**

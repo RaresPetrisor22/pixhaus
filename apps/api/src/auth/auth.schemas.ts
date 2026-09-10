@@ -4,6 +4,10 @@ export const RegisterBody = z.object({
   studioName: z.string().trim().min(1).max(200),
   email: z.email().toLowerCase().max(254),
   password: z.string().min(12).max(200),
+
+  // Required only when REGISTRATION_INVITE_CODE is set, which the schema cannot
+  // know — the service decides. Bounded here so a huge body is rejected early.
+  inviteCode: z.string().max(200).optional(),
 });
 
 export type RegisterInput = z.infer<typeof RegisterBody>;

@@ -143,6 +143,12 @@ pnpm build && pnpm api   # http://localhost:3000
 
 Stop the containerised API first (`docker compose stop api`) or the two will fight over port 3000.
 
+**Three compose files, selected by `COMPOSE_FILE` in `.env`.** The base `docker-compose.yml` is
+production-shaped — Postgres, Redis, the migration runner, the API and the worker, with nothing
+standing in for anything. `docker-compose.dev.yml` adds MinIO and Mailpit and points the API at them;
+`docker-compose.prod.yml` adds Caddy. `.env.example` selects the dev overlay, so `docker compose up`
+still needs no flags.
+
 `pnpm test` runs the row-level-security suite against your dev database when `DATABASE_URL` is
 reachable, and skips it with a message when it is not.
 

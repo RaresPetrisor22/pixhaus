@@ -50,6 +50,17 @@ export const envSchema = z.object({
   UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().max(3600).default(900),
   UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(104_857_600),
 
+  // Gates registration when set. Unset — or empty, which is what compose passes
+  // for a variable nobody filled in — means anyone can sign up, which is what
+  // development and the test suite want.
+  REGISTRATION_INVITE_CODE: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim() || undefined)
+    .refine((value) => value === undefined || value.length >= 8, {
+      message: 'must be at least 8 characters',
+    }),
+
   // Signs the short-lived client token. No default: a missing secret must kill
   // the boot, not quietly issue forgeable credentials.
   CLIENT_TOKEN_SECRET: z.string().min(32),

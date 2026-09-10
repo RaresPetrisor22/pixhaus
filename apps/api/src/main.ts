@@ -7,13 +7,23 @@ import { join } from 'node:path';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 
 import { AppModule } from './app.module';
 import { ApiExceptionFilter } from './common/api-exception.filter';
 import type { Env } from './config/env';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // In production a reverse proxy terminates TLS, so every request arrives from
+  // its address. Without this, req.ip is the proxy for everybody and each
+  // per-IP rate limit silently becomes one global limit — register would be
+  // 5/hour for the entire internet.
+  //
+  // 1, not true: trust exactly one hop, so a client cannot claim an address by
+  // sending its own X-Forwarded-For.
+  app.set('trust proxy', 1);
 
   // JSON lives under /api. The rest stay at the root because whatever reaches
   // them will not prepend a prefix: a health probe, or a human clicking a link

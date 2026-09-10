@@ -1,0 +1,115 @@
+# Development overlay: the two services production replaces with real ones.
+#
+#   MinIO    stands in for S3-compatible object storage
+#   Mailpit  catches outgoing SMTP instead of delivering it
+#
+# Selected by COMPOSE_FILE in .env, so `docker compose up` picks it up with no
+# extra flags. Production simply does not list it.
+
+services:
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+
+    restart: unless-stopped
+
+    command: ['server', '/data', '--console-address', ':9001']
+
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:?set STORAGE_ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:?set STORAGE_SECRET_KEY in .env}
+
+      # The browser PUTs straight to this origin, so the bucket needs CORS.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${APP_URL:-http://localhost:3000}
+
+    ports:
+      - '127.0.0.1:${MINIO_PORT:-9000}:9000'
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
+
+    volumes:
+      - minio-data:/data
+
+    healthcheck:
+      # The minio/minio image ships no shell utilities (no curl, wget, or mc) —
+      # only bash and coreutils. This hits MinIO's own /minio/health/live
+      # endpoint using bash's built-in /dev/tcp, verified against a live
+      # container before being wired in here.
+      test:
+        [
+          'CMD',
+          'bash',
+          '-c',
+          'exec 3<>/dev/tcp/127.0.0.1/9000; printf "GET /minio/health/live HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n" >&3; read -r line <&3; [[ "$$line" == *200* ]]',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # One-shot: creates the bucket and locks it to private, then exits 0. R2 has
+  # no equivalent step — the bucket is made once in the dashboard.
+  minio-init:
+    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+
+    depends_on:
+      minio:
+        condition: service_healthy
+
+    environment:
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:?set STORAGE_BUCKET in .env}
+
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -eu
+        mc alias set local "$$STORAGE_ENDPOINT" "$$STORAGE_ACCESS_KEY" "$$STORAGE_SECRET_KEY"
+        mc mb --ignore-existing "local/$$STORAGE_BUCKET"
+        mc anonymous set none "local/$$STORAGE_BUCKET"
+        echo "bucket $$STORAGE_BUCKET ready (private)"
+
+    restart: 'no'
+
+  mailpit:
+    image: axllent/mailpit@sha256:7f33095f80e901f6ad08028f06ca284aa58fe84942be5496008d041d3b9f4d4d
+
+    restart: unless-stopped
+
+    ports:
+      - '127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025'
+      - '127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025'
+
+  # depends_on and environment are both maps, so these merge into the base
+  # file's entries rather than replacing them.
+  api:
+    depends_on:
+      mailpit:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      # Not just minio: the bucket has to exist before /readyz can HEAD it.
+      minio-init:
+        condition: service_completed_successfully
+
+    environment:
+      # Service names, not localhost: these resolve on the compose network. The
+      # .env copies point at localhost, because those are for tooling run from
+      # your shell — `pnpm api`, `pnpm db:migrate`, the smoke script.
+      SMTP_URL: smtp://mailpit:1025
+      STORAGE_ENDPOINT: http://minio:9000
+
+      # What goes into a presigned URL, so it has to be what the BROWSER can
+      # reach — which is the published port, not a compose service name.
+      STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:${MINIO_PORT:-9000}}
+
+  worker:
+    depends_on:
+      minio:
+        condition: service_healthy
+
+    environment:
+      STORAGE_ENDPOINT: http://minio:9000
+
+volumes:
+  minio-data:

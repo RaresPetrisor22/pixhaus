@@ -44,6 +44,7 @@ function build(
     insertFailures?: string[];
     mailThrows?: boolean;
     profile?: Profile | null;
+    inviteCode?: string;
   } = {},
 ) {
   const inserts: NewStudioOwner[] = [];
@@ -106,7 +107,9 @@ function build(
     },
   } as unknown as MailService;
 
-  const config = { get: () => TTL_HOURS } as unknown as ConfigService<Env, true>;
+  const config = {
+    get: (key: string) => (key === 'REGISTRATION_INVITE_CODE' ? options.inviteCode : TTL_HOURS),
+  } as unknown as ConfigService<Env, true>;
 
   return {
     service: new AuthService(repository, sessions, mail, config),
@@ -234,6 +237,56 @@ describe('AuthService.register', () => {
     const result = await service.register(REGISTRATION);
 
     assert.equal(result.user.id, 'user-1');
+  });
+});
+
+describe('AuthService.register — the invite gate', () => {
+  const INVITE = 'a-real-invite-code';
+
+  before(() => Logger.overrideLogger(false));
+
+  test('unset means open, so development and CI are unaffected', async () => {
+    const { service, inserts } = build();
+
+    await service.register(REGISTRATION);
+    assert.equal(inserts.length, 1);
+  });
+
+  test('the right code registers', async () => {
+    const { service, inserts } = build({ inviteCode: INVITE });
+
+    await service.register({ ...REGISTRATION, inviteCode: INVITE });
+    assert.equal(inserts.length, 1);
+  });
+
+  test('a wrong code, a missing one and an empty one are the same 403', async () => {
+    for (const inviteCode of [undefined, '', 'wrong', `${INVITE}x`, INVITE.toUpperCase()]) {
+      const { service, inserts } = build({ inviteCode: INVITE });
+
+      try {
+        await service.register({ ...REGISTRATION, inviteCode });
+        assert.fail(`accepted ${JSON.stringify(inviteCode)}`);
+      } catch (error) {
+        assert.equal((error as ApiException).getStatus(), 403);
+        assert.equal((error as ApiException).code, 'invite_required');
+      }
+
+      assert.deepEqual(inserts, [], 'nothing was written');
+    }
+  });
+
+  test('rejected before the password is hashed', async () => {
+    // argon2id is deliberately expensive. An unauthenticated caller must not be
+    // able to spend it by guessing invite codes.
+    const { service } = build({ inviteCode: INVITE });
+    const started = performance.now();
+
+    await assert.rejects(service.register({ ...REGISTRATION, inviteCode: 'wrong' }));
+
+    assert.ok(
+      performance.now() - started < 50,
+      'the rejection took long enough that a hash probably ran',
+    );
   });
 });
 

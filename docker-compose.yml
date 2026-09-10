@@ -1,5 +1,17 @@
 name: pixhaus
 
+# The core stack, and it is production-shaped: Postgres, Redis, the migration
+# runner, the API and the worker. Nothing here is a stand-in.
+#
+# Two overlays sit beside it, selected by COMPOSE_FILE in .env:
+#
+#   docker-compose.dev.yml    MinIO and Mailpit, and the wiring that points the
+#                             API and worker at them instead of at real services
+#   docker-compose.prod.yml   Caddy, which terminates TLS
+#
+# Overlays rather than profiles because compose refuses to load a file whose
+# depends_on names a service a profile has disabled.
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -53,81 +65,6 @@ services:
       timeout: 3s
       retries: 12
 
-  minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-
-    restart: unless-stopped
-
-    command: ['server', '/data', '--console-address', ':9001']
-
-    environment:
-      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:?set STORAGE_ACCESS_KEY in .env}
-      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:?set STORAGE_SECRET_KEY in .env}
-
-      # The browser PUTs straight to this origin, so the bucket needs CORS.
-      MINIO_API_CORS_ALLOW_ORIGIN: ${APP_URL:-http://localhost:3000}
-
-    ports:
-      - '127.0.0.1:${MINIO_PORT:-9000}:9000'
-      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001'
-
-    volumes:
-      - minio-data:/data
-
-    healthcheck:
-      # The minio/minio image ships no shell utilities (no curl, wget, or mc) —
-      # only bash and coreutils. This hits MinIO's own /minio/health/live
-      # endpoint using bash's built-in /dev/tcp, verified against a live
-      # container before being wired in here.
-      test:
-        [
-          'CMD',
-          'bash',
-          '-c',
-          'exec 3<>/dev/tcp/127.0.0.1/9000; printf "GET /minio/health/live HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n" >&3; read -r line <&3; [[ "$$line" == *200* ]]',
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-
-  # One-shot: creates the bucket and locks it to private, then exits 0.
-  minio-init:
-    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
-
-    depends_on:
-      minio:
-        condition: service_healthy
-
-    environment:
-      STORAGE_ENDPOINT: http://minio:9000
-      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?}
-      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?}
-      STORAGE_BUCKET: ${STORAGE_BUCKET:?set STORAGE_BUCKET in .env}
-
-    entrypoint: ['/bin/sh', '-c']
-    command:
-      - |
-        set -eu
-        mc alias set local "$$STORAGE_ENDPOINT" "$$STORAGE_ACCESS_KEY" "$$STORAGE_SECRET_KEY"
-        mc mb --ignore-existing "local/$$STORAGE_BUCKET"
-        mc anonymous set none "local/$$STORAGE_BUCKET"
-        echo "bucket $$STORAGE_BUCKET ready (private)"
-
-    restart: 'no'
-
-  # Dev-only: catches outgoing SMTP instead of delivering it, with a web
-  # inbox at MAILPIT_UI_PORT. Nothing depends on it yet (M1/M3 send the
-  # first real emails), so no healthcheck and no depends_on anywhere.
-  mailpit:
-    image: axllent/mailpit@sha256:7f33095f80e901f6ad08028f06ca284aa58fe84942be5496008d041d3b9f4d4d
-
-    restart: unless-stopped
-
-    ports:
-      - '127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025'
-      - '127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025'
-
   # Applies pending migrations, then exits 0. The api service waits
   # for it to finish, so `docker compose up` always starts an API whose schema
   # is current.
@@ -164,13 +101,6 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-      mailpit:
-        condition: service_started
-      minio:
-        condition: service_healthy
-      # Not just minio: the bucket has to exist before /readyz can HEAD it.
-      minio-init:
-        condition: service_completed_successfully
       redis:
         condition: service_healthy
 
@@ -180,9 +110,10 @@ services:
       # The APP role — owns nothing, so row-level security applies to it.
       DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
 
-      # Service names, not localhost: these resolve on the compose network. The
-      # .env copies of both point at localhost, for running the API on the host.
-      SMTP_URL: smtp://mailpit:1025
+      # Required, not defaulted: the base file knows nothing about Mailpit, and
+      # a silent fallback to a mail server that is not running would look like
+      # email working right up until nobody received anything.
+      SMTP_URL: ${SMTP_URL:?set SMTP_URL in .env}
       SMTP_FROM: ${SMTP_FROM:-Pixhaus <no-reply@pixhaus.local>}
 
       # The origin a browser will use, which is the published port — not
@@ -194,8 +125,11 @@ services:
 
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
 
-      STORAGE_ENDPOINT: http://minio:9000
-      STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:${MINIO_PORT:-9000}}
+      # SigV4 signs the Host header, so a URL signed for one origin cannot be
+      # re-pointed at another. In production both are the same public hostname
+      # and the split costs nothing; the dev overlay is where they differ.
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:?set STORAGE_ENDPOINT in .env}
+      STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:?set STORAGE_PUBLIC_ENDPOINT in .env}
 
       STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
       STORAGE_BUCKET: ${STORAGE_BUCKET:?set STORAGE_BUCKET in .env}
@@ -205,6 +139,8 @@ services:
 
       UPLOAD_URL_TTL_SECONDS: ${UPLOAD_URL_TTL_SECONDS:-900}
       UPLOAD_MAX_BYTES: ${UPLOAD_MAX_BYTES:-104857600}
+
+      REGISTRATION_INVITE_CODE: ${REGISTRATION_INVITE_CODE:-}
 
       CLIENT_TOKEN_SECRET: ${CLIENT_TOKEN_SECRET:?set CLIENT_TOKEN_SECRET in .env}
       CLIENT_TOKEN_TTL_SECONDS: ${CLIENT_TOKEN_TTL_SECONDS:-3600}
@@ -237,8 +173,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
 
@@ -249,7 +183,7 @@ services:
       DATABASE_URL: postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
 
-      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:?set STORAGE_ENDPOINT in .env}
       STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
       STORAGE_BUCKET: ${STORAGE_BUCKET:?set STORAGE_BUCKET in .env}
       STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?set STORAGE_ACCESS_KEY in .env}
@@ -261,4 +195,3 @@ services:
 volumes:
   postgres-data:
   redis-data:
-  minio-data:
