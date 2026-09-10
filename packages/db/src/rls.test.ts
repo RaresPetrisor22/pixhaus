@@ -53,6 +53,7 @@ const BOOTSTRAP_FUNCTIONS = [
   'auth_lookup_user_by_email',
   'auth_lookup_user_by_verification_token',
   'auth_resolve_session',
+  'grants_lookup_by_token',
 ];
 
 // ---------------------------------------------------------------------------
@@ -485,6 +486,85 @@ describe('row-level security', { skip }, () => {
     });
   });
 
+  describe('grants_lookup_by_token', () => {
+    let hash: string;
+    let galleryId: string;
+    let grantId: string;
+
+    before(async () => {
+      hash = tokenHash();
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`SELECT set_config('app.studio_id', $1, true)`, [alpha.studioId]);
+        const gallery = await client.query<{ id: string }>(
+          `INSERT INTO galleries (studio_id, title) VALUES ($1, 'Grant fixture') RETURNING id`,
+          [alpha.studioId],
+        );
+        galleryId = gallery.rows[0].id;
+        const grant = await client.query<{ id: string }>(
+          `INSERT INTO grants (studio_id, gallery_id, token_hash, audience_email,
+                               rights_mask, expires_at)
+           VALUES ($1, $2, $3, 'client@example.test', 3, now() + interval '30 days')
+           RETURNING id`,
+          [alpha.studioId, galleryId, hash],
+        );
+        grantId = grant.rows[0].id;
+        await client.query('COMMIT');
+      } finally {
+        client.release();
+      }
+    });
+
+    test('resolves a magic link to its tenant and gallery with nothing declared', async () => {
+      const { rows } = await pool.query<{
+        id: string;
+        studio_id: string;
+        gallery_id: string;
+        rights_mask: number;
+        revocation_epoch: number;
+        revoked_at: Date | null;
+      }>('SELECT * FROM grants_lookup_by_token($1)', [hash]);
+
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].id, grantId);
+      assert.equal(rows[0].studio_id, alpha.studioId);
+      assert.equal(rows[0].gallery_id, galleryId);
+      assert.equal(rows[0].rights_mask, 3);
+      assert.equal(rows[0].revocation_epoch, 0);
+      assert.equal(rows[0].revoked_at, null);
+    });
+
+    test('returns nothing for a token that does not exist', async () => {
+      const { rows } = await pool.query('SELECT * FROM grants_lookup_by_token($1)', [tokenHash()]);
+      assert.equal(rows.length, 0);
+    });
+
+    test('never returns the token hash it was keyed on', async () => {
+      const { rows } = await pool.query('SELECT * FROM grants_lookup_by_token($1)', [hash]);
+      assert.ok(!('token_hash' in rows[0]));
+    });
+
+    test('a revoked grant still resolves — the caller decides, not the function', async () => {
+      // The function reads; refusing here would put policy in the database and
+      // leave the API unable to tell "revoked" from "never existed".
+      await inTenant(alpha.studioId, (client) =>
+        client.query('UPDATE grants SET revoked_at = now() WHERE id = $1', [grantId]),
+      );
+
+      const { rows } = await pool.query('SELECT * FROM grants_lookup_by_token($1)', [hash]);
+      assert.equal(rows.length, 1);
+    });
+
+    test('the grant row itself is invisible to another tenant', async () => {
+      const { rows } = await inTenant(beta.studioId, (client) =>
+        client.query('SELECT id FROM grants WHERE id = $1', [grantId]),
+      );
+
+      assert.equal(rows.length, 0);
+    });
+  });
+
   describe('auth_lookup_user_by_verification_token', () => {
     let hash: string;
 
@@ -593,7 +673,7 @@ describe('row-level security', { skip }, () => {
       }
     });
 
-    test('all three are SECURITY DEFINER with a pinned search_path', async () => {
+    test('all of them are SECURITY DEFINER with a pinned search_path', async () => {
       const { rows } = await pool.query<{
         proname: string;
         prosecdef: boolean;

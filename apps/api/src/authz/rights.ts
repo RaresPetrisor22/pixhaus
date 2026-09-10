@@ -18,3 +18,12 @@ export const RIGHT_NAMES = Object.keys(RIGHT) as RightName[];
 export function hasRight(mask: number, right: RightName): boolean {
   return (mask & RIGHT[right]) !== 0;
 }
+
+/** The JSON edge: names on the wire, an integer in the column. */
+export function maskFromRights(rights: RightName[]): number {
+  return rights.reduce((mask, right) => mask | RIGHT[right], 0);
+}
+
+export function rightsFromMask(mask: number): RightName[] {
+  return RIGHT_NAMES.filter((right) => hasRight(mask, right));
+}

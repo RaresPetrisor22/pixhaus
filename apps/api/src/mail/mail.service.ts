@@ -41,4 +41,30 @@ export class MailService {
       ].join('\n'),
     });
   }
+
+  async sendGrantEmail(
+    to: string,
+    token: string,
+    galleryTitle: string,
+    expiresAt: Date,
+  ): Promise<void> {
+    const url = `${this.appUrl}/g/${encodeURIComponent(token)}`;
+
+    if (!this.isProduction) {
+      this.logger.log(`gallery link for ${to}: ${url}`);
+    }
+
+    await this.transport.sendMail({
+      from: this.from,
+      to,
+      subject: `Your photos: ${galleryTitle}`,
+      text: [
+        `Your gallery "${galleryTitle}" is ready to view:`,
+        '',
+        url,
+        '',
+        `This link works until ${expiresAt.toISOString().slice(0, 10)}. No account needed.`,
+      ].join('\n'),
+    });
+  }
 }

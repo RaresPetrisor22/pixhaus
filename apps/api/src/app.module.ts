@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { validateEnv } from './config/env';
 import { DatabaseModule } from './database/database.module';
 import { GalleriesModule } from './galleries/galleries.module';
+import { GrantsModule } from './grants/grants.module';
 import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
 import { QueueModule } from './queue/queue.module';
@@ -41,6 +42,7 @@ import { UploadsModule } from './uploads/uploads.module';
     QueueModule,
     AuthModule,
     GalleriesModule,
+    GrantsModule,
     UploadsModule,
     AssetsModule,
   ],
