@@ -1,6 +1,6 @@
 # Pixhaus
 
-> Self-hosted client galleries for photographers. Upload photos, send a link, done — your clients never make an account.
+> Self-hostable client galleries for photographers. Upload photos, send a link, done — your clients never make an account.
 
 **Status: early development.** Not yet ready for production use. See [roadmap](#roadmap).
 
@@ -10,17 +10,23 @@
 
 Every client gallery product is a subscription. Pixieset's free tier is 3 GB — about half a wedding.
 
-Pixhaus is the same core workflow, self-hosted, with your own storage. You bring an S3-compatible
-bucket; storage costs you roughly $0.15/month per 10 GB instead of $10.
+Pixhaus is the same core workflow without the meter: run your own instance, or register for an invite to
+the managed one. Roughly $0.15/month per 10 GB instead of $10.
 
 ## Features
 
-- Upload full-resolution photos straight from the browser to your bucket
+- Upload full-resolution photos straight from the browser to S3-compatible storage.
 - Automatic thumbnails and web previews (ICC-correct, EXIF stripped)
 - Share links with expiry, per-link permissions, and instant revocation
 - **Clients need no account** — just a link
-- Download single photos or the whole gallery as a zip
-- Proofing mode: clients heart favorites and submit a selection
+- Download single photos, direct from storage
+
+## Next steps
+
+Mentioned so the scope is clear; not built yet.
+
+- Download the whole gallery as a zip (M4)
+- Proofing mode: clients heart favorites and submit a selection (M5)
 
 ## How it works
 
@@ -43,7 +49,7 @@ Documentation:
 ## Quick start
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/pixhaus
+git clone https://github.com/RaresPetrisor22/pixhaus
 cd pixhaus
 cp .env.example .env
 docker compose up -d --wait
@@ -167,7 +173,8 @@ served from `APP_URL` so they exercise the real CORS rules:
 
 ## How auth works
 
-Two planes, deliberately different. Only the first exists today.
+Two planes, deliberately different, because photographers and clients need fundamentally different
+machinery. Both are built as of M3.
 
 **Photographers** get real accounts: argon2id passwords, email verification, and server-side sessions
 in Postgres. The cookie is an opaque 256-bit token, `HttpOnly` and `SameSite=Lax`; the database stores
@@ -216,7 +223,7 @@ See [ADR 0001](docs/adr/0001-capability-grants-instead-of-client-accounts.md) an
 | `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | Bucket credentials — scope them to this bucket only                   |
 | `STORAGE_FORCE_PATH_STYLE`                  | `true` for MinIO; provider-dependent otherwise                        |
 | `DATABASE_URL`                              | Postgres connection string                                            |
-| `REDIS_URL`                                 | Redis connection string                                               |
+| `REDIS_URL`                                 | Redis connection string — backs the job queue                         |
 | `SMTP_URL`                                  | Outgoing mail — magic links and verification                          |
 | `SMTP_FROM`                                 | From address on those emails                                          |
 | `APP_URL`                                   | Public origin, used to build links that go out in email               |
@@ -224,7 +231,6 @@ See [ADR 0001](docs/adr/0001-capability-grants-instead-of-client-accounts.md) an
 | `EMAIL_VERIFICATION_TTL_HOURS`              | Verification link lifetime (default 24)                               |
 | `UPLOAD_URL_TTL_SECONDS`                    | Presigned upload URL lifetime (default 900 = 15 min)                  |
 | `UPLOAD_MAX_BYTES`                          | Per-file upload ceiling (default 100 MiB)                             |
-| `REDIS_URL`                                 | Redis connection string — backs the job queue                         |
 | `WORKER_CONCURRENCY`                        | Renditions processed at once (default 2)                              |
 | `CLIENT_TOKEN_SECRET`                       | Signs client tokens. 32+ chars, no default — generate your own        |
 | `CLIENT_TOKEN_TTL_SECONDS`                  | Client token lifetime, and the revocation bound (default 3600)        |

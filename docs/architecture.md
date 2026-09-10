@@ -33,7 +33,7 @@ flowchart TB
         API["API<br/>auth · authorize() · presign · grants"]
         WK["Worker pool<br/>libvips renditions · zip builder"]
         PG[("Postgres<br/>studios · galleries · assets · grants")]
-        RD[("Redis<br/>job queue · revocation denylist")]
+        RD[("Redis<br/>job queue")]
         MP["Mailpit / SMTP<br/>magic links"]
     end
 
@@ -88,7 +88,7 @@ erDiagram
         string email UK
         string password_hash
         string role
-        boolean email_verified
+        timestamp email_verified_at
         timestamp created_at
     }
     SESSIONS {
@@ -111,11 +111,16 @@ erDiagram
         uuid gallery_id FK
         uuid studio_id FK
         string storage_key
-        string content_hash
-        bigint size_bytes
         string status
         string original_filename
+        string content_type
+        string content_hash
+        bigint size_bytes
+        int width
+        int height
+        string blurhash
         int position
+        timestamp objects_deleted_at
     }
     RENDITIONS {
         uuid id PK
@@ -130,11 +135,15 @@ erDiagram
         uuid id PK
         uuid gallery_id FK
         uuid studio_id FK
+        string token_hash UK
         string audience_email
+        string label
         int rights_mask
         int revocation_epoch
         timestamp expires_at
         timestamp last_seen_at
+        timestamp selection_submitted_at
+        timestamp revoked_at
     }
     FAVORITES {
         uuid id PK
