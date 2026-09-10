@@ -101,6 +101,7 @@ export class AssetsService {
     const decision = authorize(principal, 'asset.view_preview', {
       kind: 'asset',
       studioId: principal.studioId,
+      galleryId: asset.galleryId,
       status: asset.assetStatus,
       galleryStatus: asset.galleryStatus,
     });

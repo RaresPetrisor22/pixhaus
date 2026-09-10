@@ -22,17 +22,18 @@ const principal: StudioUserPrincipal = {
   emailVerified: true,
 };
 
+const GALLERY = 'bbbbbbbb-0000-4000-8000-000000000001';
+
 function found(overrides: Partial<AssetRendition> = {}): AssetRendition {
   return {
     assetStatus: 'ready',
+    galleryId: GALLERY,
     galleryStatus: 'active',
     originalFilename: 'DSC_0001.jpg',
     storageKey: KEY,
     ...overrides,
   };
 }
-
-const GALLERY = 'bbbbbbbb-0000-4000-8000-000000000001';
 
 function objects(overrides: Partial<AssetObjects> = {}): AssetObjects {
   return {

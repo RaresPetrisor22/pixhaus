@@ -64,6 +64,7 @@ function toAsset(row: AssetRow): Asset {
  */
 export type AssetRendition = {
   assetStatus: AssetStatus;
+  galleryId: string;
   galleryStatus: GalleryStatus;
   originalFilename: string;
   storageKey: string | null;
@@ -71,6 +72,7 @@ export type AssetRendition = {
 
 type AssetRenditionRow = {
   asset_status: AssetStatus;
+  gallery_id: string;
   gallery_status: GalleryStatus;
   original_filename: string;
   storage_key: string | null;
@@ -94,6 +96,7 @@ export class AssetsRepository {
     return this.db.withTenant(studioId, async (tx) => {
       const { rows } = await tx.query<AssetRenditionRow>(
         `SELECT a.status            AS asset_status,
+                a.gallery_id        AS gallery_id,
                 g.status            AS gallery_status,
                 a.original_filename AS original_filename,
                 r.storage_key       AS storage_key
@@ -109,6 +112,7 @@ export class AssetsRepository {
       return row
         ? {
             assetStatus: row.asset_status,
+            galleryId: row.gallery_id,
             galleryStatus: row.gallery_status,
             originalFilename: row.original_filename,
             storageKey: row.storage_key,
