@@ -49,7 +49,30 @@ export const envSchema = z.object({
 
   UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().positive().max(3600).default(900),
   UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(104_857_600),
+
+  // Signs the short-lived client token. No default: a missing secret must kill
+  // the boot, not quietly issue forgeable credentials.
+  CLIENT_TOKEN_SECRET: z.string().min(32),
+
+  // Also the bound on revocation — a revoked client keeps working until their
+  // token expires. See ADR 0001.
+  CLIENT_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().max(7200).default(3600),
+
+  // Presigned URLs handed to a client.
+  CLIENT_URL_TTL_SECONDS: z.coerce.number().int().positive().max(7200).default(5400),
 });
+
+/**
+ * A URL that dies before the token that would fetch a fresh one leaves a broken
+ * grid with nothing to prompt the refresh that fixes it.
+ */
+const envRules = envSchema.refine(
+  (env) => env.CLIENT_URL_TTL_SECONDS >= env.CLIENT_TOKEN_TTL_SECONDS,
+  {
+    path: ['CLIENT_URL_TTL_SECONDS'],
+    message: 'must be at least CLIENT_TOKEN_TTL_SECONDS',
+  },
+);
 
 export type Env = z.infer<typeof envSchema>;
 
@@ -58,7 +81,7 @@ export type Env = z.infer<typeof envSchema>;
  * environment and uses whatever it returns as the config object.
  */
 export function validateEnv(raw: Record<string, unknown>): Env {
-  const result = envSchema.safeParse(raw);
+  const result = envRules.safeParse(raw);
 
   if (!result.success) {
     const problems = result.error.issues
