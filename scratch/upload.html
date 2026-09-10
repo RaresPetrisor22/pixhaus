@@ -1,0 +1,189 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Pixhaus upload probe</title>
+
+<!--
+  Throwaway. Not a product surface, not a design, not the start of apps/web.
+
+  It exists to prove two things curl cannot:
+    1. the bucket's CORS actually allows a cross-origin PUT from APP_URL
+    2. a rendition renders correctly in a real browser
+
+  Delete it once apps/web exists.
+-->
+
+<style>
+  body {
+    font:
+      14px/1.5 system-ui,
+      sans-serif;
+    max-width: 52rem;
+    margin: 2rem auto;
+    padding: 0 1rem;
+  }
+  #log {
+    background: #111;
+    color: #ddd;
+    padding: 0.75rem;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    min-height: 6rem;
+  }
+  #grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 1rem;
+  }
+  #grid img {
+    width: 200px;
+    border-radius: 4px;
+  }
+  .err {
+    color: #ff8080;
+  }
+</style>
+
+<h1>Upload probe</h1>
+
+<p>
+  <input id="email" placeholder="email" size="30" />
+  <input id="password" type="password" placeholder="password" />
+  <button id="login">Log in</button>
+</p>
+
+<p>
+  <select id="gallery"></select>
+  <input type="file" id="files" multiple accept="image/*" />
+</p>
+
+<div id="log"></div>
+<div id="grid"></div>
+
+<script>
+  const log = (message, cls = '') =>
+    (document.getElementById('log').innerHTML += `<span class="${cls}">${message}\n</span>`);
+
+  async function json(url, options) {
+    const response = await fetch(url, options);
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(`${response.status} ${JSON.stringify(body)}`);
+    return body;
+  }
+
+  async function loadGalleries() {
+    const { galleries } = await json('/api/galleries');
+    document.getElementById('gallery').innerHTML = galleries
+      .map((g) => `<option value="${g.id}">${g.title} (${g.status})</option>`)
+      .join('');
+    log(`${galleries.length} gallery(ies) loaded`);
+  }
+
+  async function upload(galleryId, file) {
+    log(`\n${file.name} — ${file.size} bytes`);
+
+    const ticket = await json(`/api/galleries/${galleryId}/uploads`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        filename: file.name,
+        size: file.size,
+        contentType: file.type,
+      }),
+    });
+    log(`  presigned ${ticket.assetId}`);
+
+    // Only content-type is set here. content-length is a forbidden header in
+    // fetch — the browser sets it from the body, and it has to match the size
+    // we declared above or the signature fails. That is the point of the test.
+    const put = await fetch(ticket.uploadUrl, {
+      method: 'PUT',
+      headers: { 'content-type': ticket.headers['content-type'] },
+      body: file,
+    });
+    if (!put.ok) throw new Error(`PUT ${put.status} — CORS or signature`);
+    log(`  PUT ${put.status} straight to the bucket`);
+
+    await json(`/api/uploads/${ticket.assetId}/finalize`, { method: 'POST' });
+    log(`  finalized`);
+
+    return ticket.assetId;
+  }
+
+  /** The listing is keyset paginated, and a new upload is on the LAST page. */
+  async function findAsset(galleryId, assetId) {
+    let cursor = '';
+    for (;;) {
+      const query = `limit=100${cursor ? `&cursor=${cursor}` : ''}`;
+      const { assets, nextCursor } = await json(`/api/galleries/${galleryId}/assets?${query}`);
+
+      const found = assets.find((a) => a.id === assetId);
+      if (found) return found;
+      if (!nextCursor) return null;
+      cursor = nextCursor;
+    }
+  }
+
+  /**
+   * The worker is asynchronous, so the rendition is not there immediately.
+   * Polls the listing rather than the rendition endpoint: a 409 per attempt
+   * would fill the console with red and bury a real failure.
+   */
+  async function showWhenReady(galleryId, assetId, tries = 60) {
+    for (let i = 0; i < tries; i++) {
+      const asset = await findAsset(galleryId, assetId);
+
+      if (asset?.status === 'ready') {
+        const img = document.createElement('img');
+        img.src = `/api/assets/${assetId}/renditions/grid`;
+        img.title = `${asset.originalFilename} — ${asset.width}x${asset.height}`;
+        document.getElementById('grid').append(img);
+        return log(`  ready — ${asset.width}x${asset.height}, blurhash ${asset.blurhash}`);
+      }
+
+      if (asset?.status === 'failed') {
+        return log(`  worker gave up on it`, 'err');
+      }
+
+      if (!asset) {
+        return log(`  vanished from the listing`, 'err');
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    log(`  still not ready after 30s`, 'err');
+  }
+
+  document.getElementById('login').addEventListener('click', async () => {
+    try {
+      const me = await json('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: document.getElementById('email').value,
+          password: document.getElementById('password').value,
+        }),
+      });
+      log(`logged in as ${me.user.email}`);
+      await loadGalleries();
+    } catch (error) {
+      log(error.message, 'err');
+    }
+  });
+
+  document.getElementById('files').addEventListener('change', async (event) => {
+    const galleryId = document.getElementById('gallery').value;
+    for (const file of event.target.files) {
+      try {
+        await showWhenReady(galleryId, await upload(galleryId, file));
+      } catch (error) {
+        log(`  ${error.message}`, 'err');
+      }
+    }
+  });
+
+  // Already have a session cookie? Then skip straight to the galleries.
+  loadGalleries().catch(() => log('not logged in yet'));
+</script>
