@@ -15,9 +15,10 @@ import type { Env } from './config/env';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
-  // JSON lives under /api. The probes stay at the root because whatever polls
-  // them will not prepend a prefix. /g/:token joins this list in M3.
-  app.setGlobalPrefix('api', { exclude: ['healthz', 'readyz'] });
+  // JSON lives under /api. The rest stay at the root because whatever reaches
+  // them will not prepend a prefix: a health probe, or a human clicking a link
+  // in an email.
+  app.setGlobalPrefix('api', { exclude: ['healthz', 'readyz', 'g/:token'] });
 
   // Last thing to touch a failed request, so every error leaves in one shape.
   app.useGlobalFilters(new ApiExceptionFilter());

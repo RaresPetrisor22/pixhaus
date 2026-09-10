@@ -7,6 +7,7 @@ import { ThrottlerGuard, ThrottlerModule, seconds } from '@nestjs/throttler';
 
 import { AssetsModule } from './assets/assets.module';
 import { AuthModule } from './auth/auth.module';
+import { ClientModule } from './client/client.module';
 import { validateEnv } from './config/env';
 import { DatabaseModule } from './database/database.module';
 import { GalleriesModule } from './galleries/galleries.module';
@@ -43,6 +44,7 @@ import { UploadsModule } from './uploads/uploads.module';
     AuthModule,
     GalleriesModule,
     GrantsModule,
+    ClientModule,
     UploadsModule,
     AssetsModule,
   ],

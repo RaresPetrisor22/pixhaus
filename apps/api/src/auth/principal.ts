@@ -33,3 +33,6 @@ export type Principal = StudioUserPrincipal | GrantPrincipal;
 
 /** What the guard attaches, and @CurrentUser() reads back. */
 export type AuthenticatedRequest = Request & { principal?: StudioUserPrincipal };
+
+/** The client-plane equivalent: what ClientGuard attaches, read by @Grant(). */
+export type GrantRequest = Request & { grant?: GrantPrincipal };
