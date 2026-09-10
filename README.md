@@ -92,6 +92,24 @@ Upload is three calls: mint a presigned PUT, PUT the bytes straight to the bucke
 which is where the server goes and looks at what actually landed. A background worker then writes
 `thumb`, `grid` and `preview` renditions plus a blurhash placeholder.
 
+Share links and the client gallery work as of M3:
+
+| Method   | Route                                          | Auth             |
+| -------- | ---------------------------------------------- | ---------------- |
+| `POST`   | `/api/galleries/:galleryId/grants`             | session          |
+| `GET`    | `/api/galleries/:galleryId/grants`             | session          |
+| `DELETE` | `/api/grants/:grantId`                         | session          |
+| `POST`   | `/api/grants/:grantId/resend`                  | session          |
+| `GET`    | `/g/:token`                                    | public           |
+| `POST`   | `/api/client/token`                            | grant            |
+| `GET`    | `/api/client/gallery`                          | `grant:view`     |
+| `GET`    | `/api/client/assets/:assetId/renditions/:kind` | `grant:view`     |
+| `POST`   | `/api/client/assets/:assetId/download`         | `grant:download` |
+
+Creating the first share link on a gallery flips it from `draft` to `active` — sharing is what
+publishes it. The raw link token is in the create response and in the email, and nowhere else: the
+database stores only its SHA-256.
+
 Outgoing mail lands in Mailpit at http://localhost:8025; in development the verification link is also
 written to the API log. Full detail in [`docs/api.md`](docs/api.md).
 
@@ -101,10 +119,12 @@ curl -X POST localhost:3000/api/auth/register -H 'content-type: application/json
 
 ### Working on the code
 
-Compose runs the API from a built image, so it will not pick up source edits. Either rebuild it:
+Compose runs the API from a built image, so it will not pick up source edits. The same is true of
+`worker` and `migrate` — `migrate` copies `packages/db/migrations/` in at build time, so a new
+migration is invisible to it until the image is rebuilt. Either rebuild:
 
 ```bash
-docker compose up -d --build api
+docker compose up -d --build            # or: --build api worker migrate
 ```
 
 or run the API on the host against the compose services, which is faster to iterate on:
@@ -123,6 +143,9 @@ reachable, and skips it with a message when it is not.
 > **Editing `docker/postgres/init/`?** It runs once, on an empty data volume. Re-run it with
 > `docker compose down -v && docker compose up -d --wait`.
 
+> **Never edit an applied migration**, comments included: the runner records a checksum and refuses
+> to continue when the file no longer matches. Write the next numbered file instead.
+
 The worker runs as its own compose service and consumes the rendition queue:
 
 ```bash
@@ -131,7 +154,16 @@ docker compose logs -f worker
 
 Run it on the host instead with `pnpm --filter @pixhaus/worker start`, after `docker compose stop worker`.
 
-The frontend is not built yet — see the [roadmap](#roadmap).
+The frontend is not built yet — see the [roadmap](#roadmap). Two throwaway probe pages stand in for it,
+served from `APP_URL` so they exercise the real CORS rules:
+
+| Page                                      | Proves                                                                       |
+| ----------------------------------------- | ---------------------------------------------------------------------------- |
+| http://localhost:3000/scratch/upload.html | Log in, upload, watch renditions appear. The browser PUT goes to the bucket. |
+| http://localhost:3000/scratch/client.html | Paste a magic link: badge, grid, download — with no cookie anywhere.         |
+
+**They are served only when `NODE_ENV` is not `production`**, so run the API on the host with
+`pnpm api`; the compose `api` service sets `NODE_ENV=production` and will 404 them.
 
 ## How auth works
 
@@ -146,12 +178,32 @@ security policy keyed on a per-transaction variable. `TenantDb.withTenant(studio
 way to obtain a database client, so a query cannot be written without a tenant — and if one ever is,
 RLS returns nothing rather than someone else's rows.
 
-Login, session lookup and email verification have to run _before_ the tenant is known, which RLS would
-otherwise make impossible. They go through three narrow `SECURITY DEFINER` functions that each answer
-one keyed question — see [ADR 0003](docs/adr/0003-photographer-sessions-and-the-rls-bootstrap.md).
+Login, session lookup, email verification and magic-link resolution have to run _before_ the tenant is
+known, which RLS would otherwise make impossible. They go through four narrow `SECURITY DEFINER`
+functions that each answer one keyed question — see
+[ADR 0003](docs/adr/0003-photographer-sessions-and-the-rls-bootstrap.md).
 
-Clients (M3) will not have accounts at all; see
-[ADR 0001](docs/adr/0001-capability-grants-instead-of-client-accounts.md).
+**Clients have no accounts at all.** Access is a capability grant — a row that _is_ the permission.
+Two tiers, because a token that is fast to check and a token that can be revoked are not the same
+token:
+
+1. The **magic link** carries 256 bits of randomness; the database stores only its SHA-256.
+   `GET /g/:token` looks it up, checks it is neither revoked nor expired, and mints —
+2. a **short-lived signed token** (HMAC-SHA256, one hour by default) carrying
+   `{grant, studio, gallery, rights, epoch}`. Every request after that verifies a signature and
+   touches no database at all. It is sent as `Authorization: Bearer`, never as a cookie — a cookie
+   rides along on any request to the origin, which is a CSRF surface for a credential handed to
+   someone we never authenticated.
+
+**Revoking sets two columns**, because they kill different things: `revoked_at` stops the magic link
+immediately, and bumping `revocation_epoch` stops tokens already sitting in a browser at their next
+refresh. So revocation of an active session is **eventually consistent, bounded by
+`CLIENT_TOKEN_TTL_SECONDS`** — an hour by default. Lower it if that matters to you; a Redis denylist
+would close the gap entirely and is not built. Rotating `CLIENT_TOKEN_SECRET` invalidates every
+client token everywhere, at once, which is the emergency brake.
+
+See [ADR 0001](docs/adr/0001-capability-grants-instead-of-client-accounts.md) and
+[ADR 0005](docs/adr/0005-the-short-lived-client-token.md).
 
 ## Configuration
 
@@ -174,9 +226,18 @@ Clients (M3) will not have accounts at all; see
 | `UPLOAD_MAX_BYTES`                          | Per-file upload ceiling (default 100 MiB)                             |
 | `REDIS_URL`                                 | Redis connection string — backs the job queue                         |
 | `WORKER_CONCURRENCY`                        | Renditions processed at once (default 2)                              |
+| `CLIENT_TOKEN_SECRET`                       | Signs client tokens. 32+ chars, no default — generate your own        |
+| `CLIENT_TOKEN_TTL_SECONDS`                  | Client token lifetime, and the revocation bound (default 3600)        |
+| `CLIENT_URL_TTL_SECONDS`                    | Presigned URLs handed to clients (default 5400; must be ≥ the above)  |
 
 Raising `WORKER_CONCURRENCY` past 4 also needs `UV_THREADPOOL_SIZE` raised to match: libvips runs on
 libuv's pool, and that is what caps how many images are processed in parallel.
+
+Generate the client-token secret rather than using the placeholder in `.env.example`:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+```
 
 Any S3-compatible provider works. R2 is recommended: no egress fees, which matters a lot when clients
 download multi-gigabyte galleries.
@@ -196,7 +257,7 @@ with `content-type` and `content-length` in the allowed headers, and expose `eta
 - [x] M0 — Scaffold, Docker Compose, CI
 - [x] M1 — Photographer accounts
 - [x] M2 — Galleries and upload pipeline
-- [ ] M3 — Share links, client gallery, downloads
+- [x] M3 — Share links, client gallery, downloads
 - [ ] M4 — Bulk zip
 - [ ] M5 — Favorites and selections
 

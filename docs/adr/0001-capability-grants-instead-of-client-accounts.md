@@ -31,6 +31,12 @@ Access is two-tier:
 
 Revocation is `UPDATE grants SET revocation_epoch = revocation_epoch + 1`.
 
+> **Amended 2026-09-10.** That is only half of it. The epoch kills outstanding short-lived
+> tokens, but the magic link is a lookup on `token_hash` and nothing in the row says "revoked" — so
+> the client clicks the same link in the same email and is issued a fresh token under the new epoch.
+> Migration `0006` adds `grants.revoked_at`, and revoking sets both: `revoked_at` ends tier 1,
+> the epoch ends tier 2. See [ADR 0005](0005-the-short-lived-client-token.md).
+
 **Why two tiers:** a pure signed token is fast but unrevocable; a DB lookup per request is revocable
 but costs 500 queries per gallery view. Tier 2 gives speed, tier 1 gives revocation.
 

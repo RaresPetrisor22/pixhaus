@@ -222,28 +222,31 @@ sequenceDiagram
     MAIL-->>CL: email
 
     CL->>API: GET /g/:grant_token
-    API->>PG: load grant
-    API->>API: check expiry + epoch match
-    API-->>CL: short-lived signed token (15 min)<br/>{grant_id, rights, epoch}
+    API->>PG: load grant by token hash
+    API->>API: check revoked_at + expires_at
+    API-->>CL: signed token (1 h)<br/>{grant_id, studio, gallery, rights, epoch}
 
-    loop each thumbnail
-        CL->>API: GET /assets/:id/rendition/grid
-        API->>API: authorize(grant, asset.view_preview, asset)
-        API->>OBJ: presign GET (5 min)
-        API-->>CL: 302 to presigned URL
-        CL->>OBJ: GET bytes (direct)
+    CL->>API: GET /api/client/gallery
+    API->>API: authorize(grant, gallery.view, gallery)
+    API->>PG: page of ready assets + rendition keys
+    API->>API: presign thumb + grid per asset<br/>(local HMAC, no network)
+    API-->>CL: assets with thumbUrl and gridUrl embedded
+    Note over CL,OBJ: one request per page of 50,<br/>not one per thumbnail
+
+    loop each image
+        CL->>OBJ: GET presigned URL (direct)
     end
 
-    CL->>API: POST /galleries/:id/download
-    API->>API: authorize(grant, asset.download_full, gallery)
+    CL->>API: POST /api/client/assets/:id/download
+    API->>API: authorize(grant, asset.download_full, asset)
     Note over API,OBJ: rights checked at mint time —<br/>the presigned URL is the boundary
     API->>OBJ: presign GET, content-disposition=attachment
     API-->>CL: download URL
     CL->>OBJ: GET (direct, bypasses API)
 
     PH->>API: DELETE /grants/:id
-    API->>PG: UPDATE grant SET revocation_epoch = epoch + 1
-    Note over CL,API: outstanding tokens fail at next mint
+    API->>PG: UPDATE grant SET revoked_at = now(),<br/>revocation_epoch = epoch + 1
+    Note over CL,API: revoked_at kills the magic link;<br/>the epoch kills tokens already issued
 ```
 
 This is the part of the system worth talking about. The tension: capability tokens want to be
@@ -253,7 +256,17 @@ and it means something). Pure JWTs can't be revoked; pure DB lookups cost a quer
 
 The resolution is the two-tier structure above: a long-lived DB-backed grant row mints short-lived
 signed tokens carrying a `revocation_epoch`. Bump the epoch and every outstanding token dies at its next
-mint — bounded by the token TTL, not instant. When instant matters, a Redis denylist covers the gap.
+refresh — bounded by the token TTL, not instant. When instant matters, a Redis denylist covers the gap.
+
+Two details that only became obvious once it was built, both in
+[ADR 0005](adr/0005-the-short-lived-client-token.md):
+
+- **Revoking has to set `revoked_at` as well as bump the epoch.** The epoch kills tokens already in a
+  browser, but the magic link is a lookup on `token_hash` — without `revoked_at` the client clicks the
+  same email again and gets a fresh token under the new epoch.
+- **The per-thumbnail loop above is gone.** The client's credential is a bearer token and an `<img>`
+  cannot send a header, so the gallery route embeds presigned URLs instead of redirecting per image.
+  Presigning is a local HMAC, so a page of fifty costs one request.
 
 Everything routes through one function:
 
@@ -299,7 +312,9 @@ accumulate rows pointing at objects that may or may not exist, and you pay to st
 | Upload URL abused as a free file host | Key prefix + exact signed `content-length` + short expiry; server-side magic-byte and size verification at finalize |
 | Client shares gallery link publicly   | Grants expire; email-gated magic link; revocation epoch; per-grant rate limits on mint                              |
 | Guessing another gallery's assets     | Presigned URLs minted only after `authorize()`; asset IDs are UUIDs; tenant predicate on every query                |
-| Revoked client keeps their token      | Short token TTL bounds the window; Redis denylist for immediate kill                                                |
+| Revoked client keeps their token      | `revoked_at` kills the magic link at once; the token TTL bounds the rest (1 h). Redis denylist would close the gap  |
+| Forged client token                   | HMAC-SHA256 with a server-side secret that is never in the database; no `alg` field to negotiate                    |
+| Client reaches another gallery        | Every client query is scoped to the grant's own gallery; `authorize()` denies `wrong_gallery` behind it             |
 | Cross-tenant data leak                | `studio_id` on every row; RLS policies; `TenantDb.withTenant` is the only way to get a client                       |
 | Stolen session cookie                 | `HttpOnly` + `SameSite=Lax`; DB stores only its SHA-256; revocable by row delete                                    |
 | Credential stuffing                   | argon2id; identical answer and timing for unknown email vs wrong password; per-IP **and** per-email limits          |
