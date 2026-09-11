@@ -28,6 +28,7 @@ FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/worker/package.json apps/worker/
+COPY apps/web/package.json apps/web/
 COPY packages/db/package.json packages/db/
 COPY packages/jobs/package.json packages/jobs/
 COPY packages/storage/package.json packages/storage/
@@ -35,7 +36,7 @@ RUN pnpm install --frozen-lockfile
 
 
 # ---------------------------------------------------------------------------
-# build — compile apps/api to dist/
+# build — compile apps/api and apps/web to their dist/
 # ---------------------------------------------------------------------------
 FROM deps AS build
 COPY tsconfig.base.json ./
@@ -43,6 +44,7 @@ COPY packages/db packages/db
 COPY packages/jobs packages/jobs
 COPY packages/storage packages/storage
 COPY apps/api apps/api
+COPY apps/web apps/web
 # packages/db first: apps/api imports the tenant wall from it, and a workspace
 # dependency has to exist as compiled .js before the dependent compiles against
 # its .d.ts. `-r` walks the graph in topological order, so this is one command.
@@ -69,6 +71,8 @@ COPY --from=build /repo/apps/api/dist apps/api/dist
 COPY --from=build /repo/packages/db/dist packages/db/dist
 COPY --from=build /repo/packages/jobs/dist packages/jobs/dist
 COPY --from=build /repo/packages/storage/dist packages/storage/dist
+# The SPA. main.ts serves it from ../../web/dist when present.
+COPY --from=build /repo/apps/web/dist apps/web/dist
 
 # The node image ships an unprivileged `node` user. Containers run as root
 # unless told otherwise, and this one has no reason to.

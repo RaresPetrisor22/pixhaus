@@ -1,17 +1,21 @@
 import 'reflect-metadata';
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import type { ServerResponse } from 'node:http';
-import { join } from 'node:path';
+import { extname, join } from 'node:path';
 
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { NextFunction, Request, Response } from 'express';
 
 import { AppModule } from './app.module';
 import { ApiExceptionFilter } from './common/api-exception.filter';
 import type { Env } from './config/env';
+
+/** Paths the server answers itself; everything else is the SPA's. */
+const SERVER_PATHS = ['/api', '/healthz', '/readyz', '/g', '/scratch'];
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -53,6 +57,32 @@ async function bootstrap(): Promise<void> {
         res.end(readFileSync(page, 'utf8'));
       });
     }
+  }
+
+  // The built SPA, served from the same origin as the API: one cookie, no CORS.
+  // Absent in development when only the API is running, so this is optional.
+  const webDist = join(__dirname, '..', '..', 'web', 'dist');
+
+  if (existsSync(webDist)) {
+    app.useStaticAssets(webDist, { index: false, maxAge: '1y', immutable: true });
+
+    // Anything else a browser navigates to is a client-side route. Files with
+    // an extension are excluded so a missing favicon is a 404, not a page.
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      const isPage =
+        (req.method === 'GET' || req.method === 'HEAD') &&
+        req.accepts('html') !== false &&
+        extname(req.path) === '' &&
+        !SERVER_PATHS.some((prefix) => req.path === prefix || req.path.startsWith(`${prefix}/`));
+
+      if (!isPage) {
+        return next();
+      }
+
+      // Never cached: index.html is what names the hashed assets.
+      res.setHeader('cache-control', 'no-cache');
+      res.sendFile(join(webDist, 'index.html'));
+    });
   }
 
   // 0.0.0.0, not localhost: inside a container, binding to the loopback

@@ -1,5 +1,6 @@
 // @ts-check
 import js from '@eslint/js';
+import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
@@ -17,5 +18,9 @@ export default tseslint.config(
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
     },
+  },
+  {
+    ...reactHooks.configs.flat.recommended,
+    files: ['**/*.tsx'],
   },
 );

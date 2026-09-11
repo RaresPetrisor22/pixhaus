@@ -16,6 +16,7 @@
     "build": "pnpm -r build",
     "test": "pnpm build:packages && pnpm -r test",
     "api": "pnpm --filter @pixhaus/api start",
+    "web": "pnpm --filter @pixhaus/web dev",
     "db:migrate": "pnpm --filter @pixhaus/db migrate",
     "db:status": "pnpm --filter @pixhaus/db migrate:status",
     "build:packages": "pnpm --filter \"./packages/*\" build"
@@ -24,6 +25,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.10.1",
     "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0"
