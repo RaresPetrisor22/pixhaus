@@ -29,9 +29,9 @@ flowchart TB
 
     subgraph app["Your infrastructure — docker compose"]
         direction TB
-        FE["Frontend<br/>virtualized grid · blurhash placeholders"]
-        API["API<br/>auth · authorize() · presign · grants"]
-        WK["Worker pool<br/>libvips renditions · zip builder"]
+        FE["Frontend<br/>React SPA · blurhash placeholders"]
+        API["API<br/>auth · authorize() · presign · grants<br/>serves the built SPA"]
+        WK["Worker pool<br/>libvips renditions · reaper"]
         PG[("Postgres<br/>studios · galleries · assets · grants")]
         RD[("Redis<br/>job queue")]
         MP["Mailpit / SMTP<br/>magic links"]
@@ -60,6 +60,10 @@ generation.
 
 The storage node sits outside the compose box on purpose — it's behind a thin interface, so MinIO
 locally and any S3-compatible provider in production are configuration, not code.
+
+The frontend is drawn as its own node but is not its own service: the API serves the built SPA from
+the same origin it answers `/api` on, so there is one certificate, no CORS, and a session cookie that
+needs no `SameSite=None`.
 
 ---
 
@@ -125,7 +129,9 @@ erDiagram
     RENDITIONS {
         uuid id PK
         uuid asset_id FK
+        uuid studio_id FK
         string kind
+        string format
         string storage_key
         int width
         int height
@@ -149,13 +155,15 @@ erDiagram
         uuid id PK
         uuid grant_id FK
         uuid asset_id FK
+        uuid studio_id FK
         timestamp created_at
     }
 ```
 
 Two things worth defending in an interview:
 
-- **`studio_id` is denormalized onto `assets` and `grants`** even though it's reachable via the gallery.
+- **`studio_id` is denormalized onto every tenant-owned table** — `assets`, `renditions`, `grants` and
+  `favorites` — even though it's reachable via the gallery.
   This lets tenant scoping be a single predicate on every query rather than a join you can forget. Pair it
   with a base repository that _requires_ tenant context — make the mistake structurally impossible, not a
   matter of discipline.
@@ -283,9 +291,9 @@ Everything routes through one function:
 authorize(principal, action, resource, context) -> Decision
 ```
 
-where `principal` is either a studio user or a grant. Actions: `gallery.view`, `asset.view_preview`,
-`asset.download_full`, `selection.favorite`, `selection.submit`, `gallery.manage`. No permission checks
-anywhere else in the codebase.
+where `principal` is either a studio user or a grant. Actions: `gallery.view`, `gallery.manage`,
+`asset.create`, `asset.view_preview`, `asset.download_full`, `selection.favorite`, `selection.submit`.
+No permission checks anywhere else in the codebase.
 
 ---
 
@@ -298,7 +306,7 @@ stateDiagram-v2
     pending --> orphaned: never finalized — reaper sweeps
     uploaded --> processing: worker dequeues
     processing --> ready: renditions written
-    processing --> failed: retries exhausted → DLQ
+    processing --> failed: retries exhausted → BullMQ failed set
     failed --> processing: manual requeue
     ready --> [*]
     orphaned --> [*]

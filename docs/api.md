@@ -1,7 +1,7 @@
 # API surface
 
-Every route the finished product exposes. No implementations — this is the target, written
-before the API exists so there is something to build against.
+Every route the finished product exposes. Everything here is built and serving except the rows
+marked **M4** (bulk zip) and **M5** (favorites and selections), which are still the target.
 
 Routes are grouped by **auth plane**, because that is the axis that actually matters here: the
 photographer plane and the client plane share almost no machinery.
@@ -33,16 +33,18 @@ the same call:
 authorize(principal, action, resource, context) -> Decision
 ```
 
-Actions: `gallery.view`, `gallery.manage`, `asset.view_preview`, `asset.download_full`,
-`selection.favorite`, `selection.submit`. There are no permission checks anywhere else.
+Actions: `gallery.view`, `gallery.manage`, `asset.create`, `asset.view_preview`,
+`asset.download_full`, `selection.favorite`, `selection.submit`. There are no permission checks
+anywhere else.
 
 **Rights bits** (`grants.rights_mask`): `1 = view`, `2 = download`, `4 = favorite`. A delivery
 gallery is `3`, a proofing gallery is `5`.
 
 **Credential transport.**
 
-- Photographer: `httpOnly`, `Secure`, `SameSite=Lax` session cookie. The value is the raw session
-  token; `sessions.id` stores its SHA-256, so the database never holds a usable cookie.
+- Photographer: `httpOnly`, `SameSite=Lax` session cookie, `Secure` whenever `NODE_ENV=production`
+  (off in development so it works over plain http). The value is the raw session token; `sessions.id`
+  stores its SHA-256, so the database never holds a usable cookie.
 - Client: `GET /g/:token` returns a short-lived signed token **in the response body**. The SPA holds
   it in memory and sends `Authorization: Bearer <token>`. Deliberately not a cookie — a cookie would
   be sent automatically by any page on the origin, which is a CSRF surface for a credential handed to
@@ -56,17 +58,17 @@ gallery is `3`, a proofing gallery is `5`.
 { "error": { "code": "gallery_not_found", "message": "..." } }
 ```
 
-| Status | Used for                                             |
-| ------ | ---------------------------------------------------- |
-| `400`  | Malformed request.                                   |
-| `401`  | No credential, or an expired/invalid one.            |
-| `403`  | Valid credential, insufficient rights.               |
-| `404`  | Not found **or not yours**.                          |
-| `409`  | Conflict (duplicate email, asset already finalized). |
-| `410`  | The grant is revoked or expired.                     |
-| `413`  | Upload exceeds the size ceiling.                     |
-| `422`  | Well-formed but semantically invalid.                |
-| `429`  | Rate limited.                                        |
+| Status | Used for                                                                       |
+| ------ | ------------------------------------------------------------------------------ |
+| `400`  | Malformed request.                                                             |
+| `401`  | No credential, or an expired/invalid one.                                      |
+| `403`  | Insufficient rights — including an unverified email, or a missing invite code. |
+| `404`  | Not found **or not yours**.                                                    |
+| `409`  | Conflict (duplicate email, asset already finalized).                           |
+| `410`  | The grant is revoked or expired.                                               |
+| `413`  | Upload exceeds the size ceiling.                                               |
+| `422`  | Well-formed but semantically invalid.                                          |
+| `429`  | Rate limited.                                                                  |
 
 The `404`-not-`403` rule matters: a cross-tenant request must not be able to distinguish "this
 gallery does not exist" from "this gallery exists and belongs to someone else". Returning `403`
@@ -79,15 +81,15 @@ handler genuinely cannot tell the difference either.
 
 ### Account and session
 
-| Method   | Path                            | Auth      | Notes                                                                                                         |
-| -------- | ------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------- |
-| `POST`   | `/api/auth/register`            | `public`  | Creates a studio **and** its first `owner` user in one transaction. Sends a verification email. Rate limited. |
-| `POST`   | `/api/auth/verify-email`        | `public`  | Token in the body. Sets `users.email_verified_at`.                                                            |
-| `POST`   | `/api/auth/resend-verification` | `public`  | Rate limited. Responds identically whether or not the address exists.                                         |
-| `POST`   | `/api/auth/login`               | `public`  | Sets the session cookie. Rate limited per IP **and** per email.                                               |
-| `POST`   | `/api/auth/logout`              | `session` | Deletes the current session row.                                                                              |
-| `DELETE` | `/api/auth/sessions`            | `session` | "Sign out everywhere" — deletes every session for the user.                                                   |
-| `GET`    | `/api/auth/me`                  | `session` | Current user + studio. What the SPA calls on boot to decide if it is logged in.                               |
+| Method   | Path                            | Auth      | Notes                                                                                                                                                                                                                                                                                                                                                  |
+| -------- | ------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST`   | `/api/auth/register`            | `public`  | `{ studioName, email, password, inviteCode? }`. Creates a studio **and** its first `owner` user in one transaction. Sends a verification email. Rate limited. When `REGISTRATION_INVITE_CODE` is set the code is required and compared in constant time before the password is hashed — `403 invite_required` without it. Unset, registration is open. |
+| `POST`   | `/api/auth/verify-email`        | `public`  | Token in the body. Sets `users.email_verified_at`.                                                                                                                                                                                                                                                                                                     |
+| `POST`   | `/api/auth/resend-verification` | `public`  | Rate limited. Responds identically whether or not the address exists.                                                                                                                                                                                                                                                                                  |
+| `POST`   | `/api/auth/login`               | `public`  | Sets the session cookie. Rate limited per IP **and** per email.                                                                                                                                                                                                                                                                                        |
+| `POST`   | `/api/auth/logout`              | `session` | Deletes the current session row.                                                                                                                                                                                                                                                                                                                       |
+| `DELETE` | `/api/auth/sessions`            | `session` | "Sign out everywhere" — deletes every session for the user.                                                                                                                                                                                                                                                                                            |
+| `GET`    | `/api/auth/me`                  | `session` | Current user + studio. What the SPA calls on boot to decide if it is logged in.                                                                                                                                                                                                                                                                        |
 
 Registration and login are two of the operations that must run before a tenant is known — see the
 header of `packages/db/migrations/0002_auth_bootstrap.sql` and [ADR 0003](adr/0003-photographer-sessions-and-the-rls-bootstrap.md).
