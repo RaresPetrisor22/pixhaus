@@ -15,7 +15,7 @@ import { ApiExceptionFilter } from './common/api-exception.filter';
 import type { Env } from './config/env';
 
 /** Paths the server answers itself; everything else is the SPA's. */
-const SERVER_PATHS = ['/api', '/healthz', '/readyz', '/g', '/scratch'];
+const SERVER_PATHS = ['/api', '/healthz', '/readyz', '/scratch'];
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -29,10 +29,9 @@ async function bootstrap(): Promise<void> {
   // sending its own X-Forwarded-For.
   app.set('trust proxy', 1);
 
-  // JSON lives under /api. The rest stay at the root because whatever reaches
-  // them will not prepend a prefix: a health probe, or a human clicking a link
-  // in an email.
-  app.setGlobalPrefix('api', { exclude: ['healthz', 'readyz', 'g/:token'] });
+  // JSON lives under /api. The probes stay at the root because whatever polls
+  // them will not prepend a prefix.
+  app.setGlobalPrefix('api', { exclude: ['healthz', 'readyz'] });
 
   // Last thing to touch a failed request, so every error leaves in one shape.
   app.useGlobalFilters(new ApiExceptionFilter());
@@ -49,7 +48,7 @@ async function bootstrap(): Promise<void> {
   // never a path from the request. Goes away with the pages, once apps/web
   // exists.
   if (config.get('NODE_ENV', { infer: true }) !== 'production') {
-    for (const name of ['upload.html', 'client.html']) {
+    for (const name of ['upload.html']) {
       const page = join(__dirname, '..', '..', '..', 'scratch', name);
 
       app.use(`/scratch/${name}`, (_req: unknown, res: ServerResponse) => {

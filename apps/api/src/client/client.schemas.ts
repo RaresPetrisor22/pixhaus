@@ -6,3 +6,9 @@ export const ClientGalleryQuery = z.object({
 });
 
 export type ClientGalleryInput = z.infer<typeof ClientGalleryQuery>;
+
+export const ExchangeBody = z.object({
+  token: z.string().min(1).max(200),
+});
+
+export type ExchangeInput = z.infer<typeof ExchangeBody>;

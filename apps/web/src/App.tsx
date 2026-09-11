@@ -1,5 +1,7 @@
 import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router';
 
+import ClientEntry from './pages/ClientEntry';
+import ClientGallery from './pages/ClientGallery';
 import Galleries from './pages/Galleries';
 import Gallery from './pages/Gallery';
 import Login from './pages/Login';
@@ -65,6 +67,8 @@ export default function App() {
                 </RequireSession>
               }
             />
+            <Route path="/g/:token" element={<ClientEntry />} />
+            <Route path="/gallery" element={<ClientGallery />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

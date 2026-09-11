@@ -19,11 +19,13 @@ export class GrantThrottlerGuard extends ThrottlerGuard {
   }
 
   protected override getTracker(req: Record<string, unknown>): Promise<string> {
-    const params = req.params as { token?: unknown } | undefined;
+    const body = req.body as { token?: unknown } | undefined;
     const headers = req.headers as { authorization?: string } | undefined;
 
+    // The magic link's exchange carries the token in the body; every other
+    // client route carries a badge in the header.
     const credential =
-      typeof params?.token === 'string' ? params.token : readBearer(headers?.authorization);
+      typeof body?.token === 'string' ? body.token : readBearer(headers?.authorization);
 
     if (credential && credential.length <= 512) {
       return Promise.resolve(`grant:${hashToken(credential)}`);

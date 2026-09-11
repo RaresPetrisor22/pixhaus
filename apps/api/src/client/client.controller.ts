@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Header,
@@ -16,30 +17,37 @@ import type { GrantPrincipal } from '../auth/principal';
 import { Public } from '../auth/public.decorator';
 import { RenditionKindParam } from '../assets/rendition-kind.pipe';
 import { UuidParam } from '../common/uuid-param.pipe';
-import { ZodQuery } from '../common/zod-body.pipe';
+import { ZodBody, ZodQuery } from '../common/zod-body.pipe';
 import { ClientGalleryService } from './client-gallery.service';
 import { ClientService } from './client.service';
 import { ClientGuard } from './client.guard';
-import { ClientGalleryQuery, type ClientGalleryInput } from './client.schemas';
+import {
+  ClientGalleryQuery,
+  ExchangeBody,
+  type ClientGalleryInput,
+  type ExchangeInput,
+} from './client.schemas';
 import { Grant } from './grant.decorator';
 import { GrantThrottlerGuard } from './grant-throttler.guard';
 
 /**
- * At the root, not under /api, because this URL is typed and clicked by a
- * human: nothing in an email prepends a prefix. main.ts excludes it.
+ * The magic link's exchange. The link itself — /g/:token — is a page served by
+ * the SPA, which posts the token here. In the body, not the path: a proxy logs
+ * paths and a Referer header leaks them.
  */
-@Controller('g')
-export class MagicLinkController {
+@Controller('client')
+export class ClientSessionController {
   constructor(private readonly client: ClientService) {}
 
-  // The unauthenticated door, keyed on a secret in a URL, so the tightest
-  // budget in the plane.
+  // The unauthenticated door, keyed on a secret, so the tightest budget in
+  // the plane.
   @Public()
   @UseGuards(GrantThrottlerGuard)
   @Throttle({ grant: { limit: 20, ttl: minutes(60) } })
-  @Get(':token')
-  exchange(@Param('token') token: string) {
-    return this.client.exchange(token);
+  @Post('session')
+  @HttpCode(HttpStatus.OK)
+  exchange(@Body(new ZodBody(ExchangeBody)) body: ExchangeInput) {
+    return this.client.exchange(body.token);
   }
 }
 

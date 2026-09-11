@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router';
 
 import { api, describe, type Asset, type Gallery as GalleryRecord, type Page } from '../api';
 import { Blurhash } from '../blurhash';
+import { ShareLinks } from '../share-links';
 import { Notice } from '../ui';
 import { uploadFile, type UploadStep } from '../upload';
 import { StatusPill } from './Galleries';
@@ -112,6 +113,16 @@ export default function Gallery() {
           <StatusPill status={gallery.status} />
         </span>
       </div>
+
+      <ShareLinks
+        galleryId={id}
+        onShared={() =>
+          void api
+            .get<GalleryRecord>(`/api/galleries/${id}`)
+            .then(setGallery)
+            .catch(() => undefined)
+        }
+      />
 
       {gallery.status !== 'archived' && (
         <label className="block cursor-pointer rounded-md border border-dashed border-neutral-300 px-4 py-6 text-center text-sm text-neutral-600 hover:bg-neutral-50">

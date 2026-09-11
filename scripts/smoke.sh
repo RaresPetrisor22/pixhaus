@@ -111,7 +111,8 @@ echo "  created, and the raw token came back once"
 
 echo
 echo "== 6. the client, holding nothing but a link =="
-SESSION=$(curl -sf "$API/g/$LINK_TOKEN") || fail "the magic link did not resolve"
+SESSION=$(curl -sf -X POST "$API/api/client/session" -H 'content-type: application/json' \
+  -d "{\"token\":\"$LINK_TOKEN\"}") || fail "the magic link did not resolve"
 BADGE=$(echo "$SESSION" | json "d['token']")
 echo "$SESSION" | json "'  rights: %s, until %s' % (', '.join(d['rights']), d['expiresAt'])"
 
@@ -139,7 +140,8 @@ echo "  byte-for-byte identical, served as an attachment"
 echo
 echo "== 8. revocation kills both tiers =="
 curl -sf -X DELETE "$API/api/grants/$GRANT_ID" -b "$COOKIES" >/dev/null
-LINK=$(code "$API/g/$LINK_TOKEN")
+LINK=$(code -X POST "$API/api/client/session" -H 'content-type: application/json' \
+  -d "{\"token\":\"$LINK_TOKEN\"}")
 REFRESH=$(code -X POST "$API/api/client/token" -H "authorization: Bearer $BADGE")
 [ "$LINK" = 410 ] || fail "the magic link still works after revocation ($LINK)"
 [ "$REFRESH" = 410 ] || fail "the badge still refreshes after revocation ($REFRESH)"

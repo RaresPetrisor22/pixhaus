@@ -42,6 +42,43 @@ export type Asset = {
 
 export type Page<K extends string, T> = { [key in K]: T[] } & { nextCursor: string | null };
 
+export type RightName = 'view' | 'download' | 'favorite';
+
+export type Grant = {
+  id: string;
+  galleryId: string;
+  audienceEmail: string;
+  label: string | null;
+  rights: RightName[];
+  expiresAt: string;
+  lastSeenAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+};
+
+/** The raw token is in this response and never retrievable again. */
+export type IssuedGrant = { grant: Grant; token: string };
+
+export type ClientSession = { token: string; expiresAt: string; rights: RightName[] };
+
+export type ClientAsset = {
+  id: string;
+  filename: string;
+  width: number | null;
+  height: number | null;
+  blurhash: string | null;
+  thumbUrl: string | null;
+  gridUrl: string | null;
+};
+
+export type ClientGalleryPage = {
+  gallery: { id: string; title: string };
+  assets: ClientAsset[];
+  nextCursor: string | null;
+};
+
+export type SignedUrl = { url: string; expiresAt: string };
+
 type Options = { body?: unknown; bearer?: string };
 
 function parseJson(text: string): unknown {
