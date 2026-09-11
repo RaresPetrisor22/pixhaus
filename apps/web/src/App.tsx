@@ -1,6 +1,7 @@
 import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router';
 
 import Galleries from './pages/Galleries';
+import Gallery from './pages/Gallery';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import VerifyEmail from './pages/VerifyEmail';
@@ -53,6 +54,14 @@ export default function App() {
               element={
                 <RequireSession>
                   <Galleries />
+                </RequireSession>
+              }
+            />
+            <Route
+              path="/galleries/:id"
+              element={
+                <RequireSession>
+                  <Gallery />
                 </RequireSession>
               }
             />

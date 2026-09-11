@@ -17,6 +17,31 @@ export type Profile = {
   studio: { id: string; name: string; slug: string };
 };
 
+export type Gallery = {
+  id: string;
+  title: string;
+  status: 'draft' | 'active' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AssetStatus = 'pending' | 'uploaded' | 'processing' | 'ready' | 'failed' | 'orphaned';
+
+export type Asset = {
+  id: string;
+  status: AssetStatus;
+  originalFilename: string;
+  contentType: string | null;
+  sizeBytes: number | null;
+  width: number | null;
+  height: number | null;
+  blurhash: string | null;
+  position: number;
+  createdAt: string;
+};
+
+export type Page<K extends string, T> = { [key in K]: T[] } & { nextCursor: string | null };
+
 type Options = { body?: unknown; bearer?: string };
 
 function parseJson(text: string): unknown {
