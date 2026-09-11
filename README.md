@@ -44,6 +44,7 @@ Documentation:
 
 - [`docs/architecture.md`](docs/architecture.md) — diagrams, data model, threat model
 - [`docs/api.md`](docs/api.md) — every route, method, and auth requirement
+- [`docs/deployment.md`](docs/deployment.md) — putting it on a box, with TLS, R2 and real email
 - [`docs/adr/`](docs/adr/) — why the load-bearing decisions were made
 
 ## Quick start
