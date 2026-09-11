@@ -4,6 +4,7 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { ApiException } from '../common/api-exception';
+import { describeError } from '../common/describe-error';
 import type { Env } from '../config/env';
 import { uniqueViolation } from '../database/pg-errors';
 import { MailService } from '../mail/mail.service';
@@ -211,9 +212,12 @@ export class AuthService {
     try {
       await this.mail.sendVerificationEmail(email, token, this.verificationTtlHours);
     } catch (error) {
+      // The cause goes in the message, not just the trace: nodemailer puts the
+      // SMTP response ("535 Authentication failed") in error.message, and a
+      // stack alone says only which line noticed.
       this.logger.error(
-        `could not send verification email to ${email}`,
-        error instanceof Error ? error.stack : String(error),
+        `could not send verification email to ${email}: ${describeError(error)}`,
+        error instanceof Error ? error.stack : undefined,
       );
     }
   }
