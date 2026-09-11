@@ -320,8 +320,23 @@ curl -sX POST https://pixhaus.example.com/api/auth/register \
        "password":"a long passphrase","inviteCode":"<REGISTRATION_INVITE_CODE>"}'
 ```
 
-A real email should arrive. Click the link — that proves Resend, your DNS
-records and `APP_URL` are all correct at once. Then run the full flow:
+A real email should arrive — that alone proves Resend, your DNS records and
+`APP_URL` are all correct.
+
+**The link in it is not clickable yet.** It points at `APP_URL/verify-email`,
+a page for a frontend that does not exist, so the API answers with its JSON 404
+and the browser downloads it. Until `apps/web` is built, copy the token out of
+the URL — everything after `?token=` — and post it:
+
+```bash
+curl -s -X POST https://pixhausapp.com/api/auth/verify-email \
+  -H 'content-type: application/json' -d '{"token":"<from the link>"}'
+```
+
+`{"verified":true}` means done. The same is true of a client magic link: `/g/…`
+resolves and returns JSON, but there is no page to render it.
+
+Then run the full flow:
 
 ```bash
 SMOKE_EMAIL=you@example.com SMOKE_PASSWORD='a long passphrase' \
