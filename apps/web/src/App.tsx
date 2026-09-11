@@ -1,31 +1,65 @@
-import { useEffect, useState } from 'react';
+import { BrowserRouter, Link, Navigate, Route, Routes } from 'react-router';
 
-type Me = { user: { email: string }; studio: { name: string } };
+import Galleries from './pages/Galleries';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import VerifyEmail from './pages/VerifyEmail';
+import { RequireSession, SessionProvider, useSession } from './session';
+import { Button } from './ui';
 
-type State = { kind: 'loading' } | { kind: 'signed-out' } | { kind: 'signed-in'; me: Me };
-
-export default function App() {
-  const [state, setState] = useState<State>({ kind: 'loading' });
-
-  useEffect(() => {
-    fetch('/api/auth/me')
-      .then(async (response) =>
-        response.ok
-          ? setState({ kind: 'signed-in', me: (await response.json()) as Me })
-          : setState({ kind: 'signed-out' }),
-      )
-      .catch(() => setState({ kind: 'signed-out' }));
-  }, []);
+function Header() {
+  const { session, signOut } = useSession();
 
   return (
-    <main className="mx-auto max-w-2xl p-8 font-sans">
-      <h1 className="text-3xl font-semibold tracking-tight">Pixhaus</h1>
-      <p className="mt-4 text-neutral-600">
-        {state.kind === 'loading' && 'Checking session…'}
-        {state.kind === 'signed-out' && 'Signed out.'}
-        {state.kind === 'signed-in' &&
-          `Signed in to ${state.me.studio.name} as ${state.me.user.email}.`}
-      </p>
-    </main>
+    <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-3">
+      <Link to="/" className="text-lg font-semibold tracking-tight">
+        Pixhaus
+      </Link>
+      {session.status === 'in' && (
+        <div className="flex items-center gap-3 text-sm text-neutral-600">
+          <span>{session.me.user.email}</span>
+          <Button variant="secondary" onClick={() => void signOut()}>
+            Sign out
+          </Button>
+        </div>
+      )}
+    </header>
+  );
+}
+
+function Home() {
+  const { session } = useSession();
+  if (session.status === 'loading') return null;
+  return <Navigate to={session.status === 'in' ? '/galleries' : '/login'} replace />;
+}
+
+function NotFound() {
+  return <p className="p-8 text-neutral-600">There is nothing here.</p>;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <SessionProvider>
+        <Header />
+        <main className="px-6">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route
+              path="/galleries"
+              element={
+                <RequireSession>
+                  <Galleries />
+                </RequireSession>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </main>
+      </SessionProvider>
+    </BrowserRouter>
   );
 }
