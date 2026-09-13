@@ -15,6 +15,18 @@ Upload photos, send a link, done — your clients never make an account.
 
 > **Status: early development.** Not yet ready for production use. See the [roadmap](#roadmap).
 
+## Demo
+
+A live instance runs at **[pixhausapp.com](https://pixhausapp.com)**. Registration is invite-only,
+so use the demo studio:
+
+| Sign in as      | `demo@pixhausapp.com` · `<demo passphrase>`                        |
+| --------------- | ------------------------------------------------------------------ |
+| Or, as a client | `<share link printed by scripts/seed-demo.sh>` — no account needed |
+
+The demo gallery is reseeded by hand from `scripts/fixtures/`; anything you add to it is not
+permanent. To run your own instance, see [`docs/deployment.md`](docs/deployment.md).
+
 <!-- Add a screenshot here as soon as you have one. It's the single highest-impact thing in this file. -->
 
 ## Contents
@@ -261,21 +273,17 @@ Docker image bakes it in, so `docker compose up` already gives you something to 
 server with hot reload:
 
 ```bash
-pnpm web        # http://localhost:5173, proxying /api and /g to port 3000
+pnpm web        # http://localhost:5173, proxying /api to port 3000
 ```
 
-Built so far: register, verify email, log in, the gallery list, and a gallery with upload and live
-rendition status. **Share-link management and the client-facing gallery are not there yet** — until
-they are, two throwaway probe pages stand in, served from `APP_URL` so they exercise the real CORS
-rules:
+The whole product is in the app: register, verify, sign in, create a gallery, upload with live
+rendition status, share it, and — for someone holding nothing but a link — browse, preview and
+download. The photographer's screens ride on the session cookie; the client's ride on a bearer token
+held in memory and refreshed before it expires, which is why the client grid loads images straight
+from storage rather than through a redirect.
 
-| Page                                      | Proves                                                                       |
-| ----------------------------------------- | ---------------------------------------------------------------------------- |
-| http://localhost:3000/scratch/upload.html | Log in, upload, watch renditions appear. The browser PUT goes to the bucket. |
-| http://localhost:3000/scratch/client.html | Paste a magic link: badge, grid, download — with no cookie anywhere.         |
-
-**They are served only when `NODE_ENV` is not `production`**, so run the API on the host with
-`pnpm api`; the compose `api` service sets `NODE_ENV=production` and will 404 them.
+`pnpm build` compiles it to `apps/web/dist`, and the API serves that from the same origin when it
+exists — no CORS, one cookie. In production the Docker image does the same.
 
 ## How auth works
 
@@ -373,7 +381,7 @@ with `content-type` and `content-length` in the allowed headers, and expose `eta
 - [x] M2 — Galleries and upload pipeline
 - [x] M3 — Share links, client gallery, downloads
 - [x] M3.5 — Deployment: TLS, R2, real email, smoke script
-- [ ] M3.6 — Web app — photographer screens done; share links and the client gallery in progress
+- [x] M3.6 — Web app: photographer screens, share links, client gallery
 - [ ] M4 — Bulk zip
 - [ ] M5 — Favorites and selections
 

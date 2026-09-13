@@ -238,7 +238,8 @@ sequenceDiagram
     API->>MAIL: magic link containing grant token
     MAIL-->>CL: email
 
-    CL->>API: GET /g/:grant_token
+    CL->>API: GET /g/:grant_token — the SPA's page
+    CL->>API: POST /api/client/session {token}
     API->>PG: load grant by token hash
     API->>API: check revoked_at + expires_at
     API-->>CL: signed token (1 h)<br/>{grant_id, studio, gallery, rights, epoch}

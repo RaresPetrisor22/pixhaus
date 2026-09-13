@@ -426,3 +426,30 @@ logs, not user data.
 - Database passwords — see the warning in step 5. Not a five-minute job.
 
 Both take effect on `docker compose up -d api`.
+
+---
+
+## 8. The demo
+
+A visitor should land on real photos, not a sign-up form. That is a seeded studio, created once by
+hand and filled by a script.
+
+1. **Photos.** Put 8–12 of them in `scripts/fixtures/` and commit them — see the README there.
+   The box gets them with `git pull`.
+2. **The account.** Register it through the UI at `/register` with the invite code from `.env`,
+   then click the link in the email. Something like `demo@yourdomain` with a passphrase you are happy
+   to print in the README.
+3. **Seed it**, from the box:
+
+   ```bash
+   DEMO_EMAIL=demo@pixhausapp.com DEMO_PASSWORD='the passphrase' \
+     scripts/seed-demo.sh https://pixhausapp.com scripts/fixtures
+   ```
+
+   It signs in, creates a gallery, uploads every photo through the real pipeline, waits for the
+   worker, and creates a share link — printed at the end. That link is the client-side demo.
+
+4. **Put both in the README**: the sign-in credentials, and the share link.
+
+Re-seeding is manual for now: delete the gallery in the UI and run the script again. A nightly
+reset is on the list, not built.

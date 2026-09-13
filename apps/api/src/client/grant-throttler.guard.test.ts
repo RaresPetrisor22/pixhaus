@@ -34,7 +34,11 @@ describe('GrantThrottlerGuard.getTracker', () => {
   });
 
   test('an absurdly long token is not hashed, it is treated as no credential', async () => {
-    const key = await guard().track({ body: { token: 'x'.repeat(600) }, headers: {}, ip: '2.2.2.2' });
+    const key = await guard().track({
+      body: { token: 'x'.repeat(600) },
+      headers: {},
+      ip: '2.2.2.2',
+    });
 
     assert.equal(key, 'ip:2.2.2.2');
   });

@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 
-import { existsSync, readFileSync } from 'node:fs';
-import type { ServerResponse } from 'node:http';
+import { existsSync } from 'node:fs';
 import { extname, join } from 'node:path';
 
 import { Logger } from '@nestjs/common';
@@ -15,7 +14,7 @@ import { ApiExceptionFilter } from './common/api-exception.filter';
 import type { Env } from './config/env';
 
 /** Paths the server answers itself; everything else is the SPA's. */
-const SERVER_PATHS = ['/api', '/healthz', '/readyz', '/scratch'];
+const SERVER_PATHS = ['/api', '/healthz', '/readyz'];
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -42,21 +41,6 @@ async function bootstrap(): Promise<void> {
 
   const config = app.get(ConfigService<Env, true>);
   const port = config.get('PORT', { infer: true });
-
-  // Dev only, and temporary: the probes have to be served from APP_URL or they
-  // are not testing the CORS rule the browser will actually hit. A fixed list,
-  // never a path from the request. Goes away with the pages, once apps/web
-  // exists.
-  if (config.get('NODE_ENV', { infer: true }) !== 'production') {
-    for (const name of ['upload.html']) {
-      const page = join(__dirname, '..', '..', '..', 'scratch', name);
-
-      app.use(`/scratch/${name}`, (_req: unknown, res: ServerResponse) => {
-        res.setHeader('content-type', 'text/html; charset=utf-8');
-        res.end(readFileSync(page, 'utf8'));
-      });
-    }
-  }
 
   // The built SPA, served from the same origin as the API: one cookie, no CORS.
   // Absent in development when only the API is running, so this is optional.
