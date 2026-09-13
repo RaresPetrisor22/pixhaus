@@ -8,7 +8,7 @@
 
 services:
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
 
     restart: unless-stopped
 
@@ -48,7 +48,7 @@ services:
   # One-shot: creates the bucket and locks it to private, then exits 0. R2 has
   # no equivalent step — the bucket is made once in the dashboard.
   minio-init:
-    image: minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    image: quay.io/minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
 
     depends_on:
       minio:
