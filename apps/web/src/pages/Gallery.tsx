@@ -4,6 +4,8 @@ import { Link, useParams } from 'react-router';
 import { api, describe, type Asset, type Gallery as GalleryRecord, type Page } from '../api';
 import { Blurhash } from '../blurhash';
 import { Hero } from '../hero';
+import { StarIcon } from '../icons';
+import { Lightbox } from '../lightbox';
 import { ShareLinks } from '../share-links';
 import { Notice } from '../ui';
 import { uploadFile, type UploadStep } from '../upload';
@@ -34,7 +36,7 @@ export default function Gallery() {
   const [gallery, setGallery] = useState<GalleryRecord | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [uploads, setUploads] = useState<Upload[]>([]);
-  const [preview, setPreview] = useState<Asset | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const photos = useRef<HTMLDivElement>(null);
 
@@ -88,6 +90,21 @@ export default function Gallery() {
     await api.delete(`/api/assets/${asset.id}`);
     setAssets((current) => current.filter((a) => a.id !== asset.id));
   }
+
+  // Only finished photos can be opened, so the lightbox walks those.
+  const ready = assets.filter((asset) => asset.status === 'ready');
+
+  // Clamped, because the arrow keys fire at both ends where the buttons hide.
+  const step = useCallback(
+    (delta: number) =>
+      setOpen((at) => {
+        if (at === null) return at;
+        const next = at + delta;
+        return next < 0 || next >= ready.length ? at : next;
+      }),
+    [ready.length],
+  );
+  const close = useCallback(() => setOpen(null), []);
 
   async function setCover(asset: Asset) {
     try {
@@ -179,7 +196,7 @@ export default function Gallery() {
               key={asset.id}
               asset={asset}
               isCover={asset.id === gallery.coverAssetId}
-              onOpen={() => setPreview(asset)}
+              onOpen={() => setOpen(ready.findIndex((one) => one.id === asset.id))}
               onCover={() => void setCover(asset)}
               onRemove={() => void remove(asset)}
             />
@@ -191,19 +208,19 @@ export default function Gallery() {
         )}
       </div>
 
-      {preview && (
+      {open !== null && ready[open] && (
         // The photographer plane sends the cookie, so the API's 302 to the
         // presigned URL is enough; no fetch first.
-        <div
-          onClick={() => setPreview(null)}
-          className="fixed inset-0 z-10 grid cursor-zoom-out place-items-center bg-black/80 p-4"
-        >
-          <img
-            src={`/api/assets/${preview.id}/renditions/preview`}
-            alt={preview.originalFilename}
-            className="max-h-full max-w-full"
-          />
-        </div>
+        <Lightbox
+          src={`/api/assets/${ready[open].id}/renditions/preview`}
+          alt={ready[open].originalFilename}
+          position={`${open + 1} / ${ready.length}`}
+          hasPrev={open > 0}
+          hasNext={open < ready.length - 1}
+          onPrev={() => step(-1)}
+          onNext={() => step(1)}
+          onClose={close}
+        />
       )}
     </section>
   );
@@ -224,11 +241,17 @@ function Tile({
 }) {
   const ratio = asset.width && asset.height ? `${asset.width} / ${asset.height}` : '3 / 2';
 
+  const round =
+    'grid place-items-center rounded-full border border-white/25 bg-black/40 text-white opacity-0 backdrop-blur transition duration-300 group-hover:opacity-100 hover:bg-black/70';
+
   return (
     <figure
-      className="group relative mb-3 break-inside-avoid overflow-hidden rounded-md bg-neutral-200"
+      className={`group relative mb-3 break-inside-avoid overflow-hidden rounded-md bg-neutral-200 ${
+        asset.status === 'ready' ? 'cursor-pointer' : ''
+      }`}
       style={{ aspectRatio: ratio }}
       title={asset.originalFilename}
+      onClick={asset.status === 'ready' ? onOpen : undefined}
     >
       {asset.blurhash && (
         <Blurhash hash={asset.blurhash} className="absolute inset-0 h-full w-full" />
@@ -238,10 +261,16 @@ function Tile({
           src={`/api/assets/${asset.id}/renditions/grid`}
           alt={asset.originalFilename}
           loading="lazy"
-          onClick={onOpen}
-          className="absolute inset-0 h-full w-full cursor-zoom-in object-cover"
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
         />
       )}
+
+      {/* Darkens the edges on hover, so a photo answers the pointer without
+          anything being drawn on top of it. */}
+      {asset.status === 'ready' && (
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(0,0,0,0.45)_100%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+      )}
+
       {asset.status !== 'ready' && (
         <figcaption
           className={`absolute inset-x-0 bottom-0 px-2 py-1 text-xs ${
@@ -251,25 +280,35 @@ function Tile({
           {asset.status === 'failed' ? 'processing failed' : 'processing…'}
         </figcaption>
       )}
+
       <button
         type="button"
-        onClick={onRemove}
+        onClick={(event) => {
+          event.stopPropagation();
+          onRemove();
+        }}
         aria-label="Delete photo"
-        className="absolute top-2 right-2 hidden h-7 w-7 rounded-full bg-black/60 text-white group-hover:block"
+        className={`absolute top-3 right-3 h-9 w-9 text-lg leading-none ${round}`}
       >
         ×
       </button>
+
       {asset.status === 'ready' && !isCover && (
         <button
           type="button"
-          onClick={onCover}
-          className="absolute bottom-2 left-2 hidden rounded bg-black/60 px-2 py-1 text-xs text-white group-hover:block"
+          onClick={(event) => {
+            event.stopPropagation();
+            onCover();
+          }}
+          aria-label="Make this the cover photo"
+          className={`absolute bottom-3 left-3 h-9 w-9 ${round}`}
         >
-          Make cover
+          <StarIcon />
         </button>
       )}
       {isCover && (
-        <span className="absolute bottom-2 left-2 rounded bg-white/90 px-2 py-1 text-xs font-medium text-neutral-900">
+        <span className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-[0.7rem] tracking-[0.15em] text-neutral-900 uppercase backdrop-blur">
+          <StarIcon className="h-3.5 w-3.5" />
           Cover
         </span>
       )}
