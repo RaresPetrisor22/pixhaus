@@ -8,6 +8,7 @@ import { GalleriesService } from './galleries.service';
 
 const STUDIO = '11111111-1111-1111-1111-111111111111';
 const GALLERY_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
+const ASSET_ID = 'bbbbbbbb-0000-4000-8000-000000000002';
 
 const verified: StudioUserPrincipal = {
   kind: 'user',
@@ -24,13 +25,14 @@ function gallery(overrides: Partial<Gallery> = {}): Gallery {
     id: GALLERY_ID,
     title: 'Ana & Mihai',
     status: 'draft',
+    coverAssetId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
   };
 }
 
-function build(stored: Gallery | null = gallery()) {
+function build(stored: Gallery | null = gallery(), coverUsable = true) {
   const calls: string[] = [];
 
   const repository = {
@@ -43,6 +45,10 @@ function build(stored: Gallery | null = gallery()) {
     update: (_s: string, _g: string, changes: Partial<Gallery>) => {
       calls.push(`update:${JSON.stringify(changes)}`);
       return Promise.resolve(stored ? gallery({ ...stored, ...changes }) : null);
+    },
+    hasReadyAsset: (_s: string, _g: string, assetId: string) => {
+      calls.push(`hasReadyAsset:${assetId}`);
+      return Promise.resolve(coverUsable);
     },
     delete: () => {
       calls.push('delete');
@@ -130,5 +136,30 @@ describe('GalleriesService — update', () => {
     await service.update(verified, GALLERY_ID, { status: 'active' });
 
     assert.deepEqual(calls, ['update:{"status":"active"}']);
+  });
+
+  test('a cover has to be a ready photo of this gallery', async () => {
+    const { service } = build(gallery(), false);
+
+    assert.equal(
+      await codeOf(() => service.update(verified, GALLERY_ID, { coverAssetId: ASSET_ID })),
+      'asset_not_found',
+    );
+  });
+
+  test('an accepted cover is checked before it is stored', async () => {
+    const { service, calls } = build();
+
+    await service.update(verified, GALLERY_ID, { coverAssetId: ASSET_ID });
+
+    assert.deepEqual(calls, [`hasReadyAsset:${ASSET_ID}`, `update:{"coverAssetId":"${ASSET_ID}"}`]);
+  });
+
+  test('clearing the cover needs no photo to check', async () => {
+    const { service, calls } = build();
+
+    await service.update(verified, GALLERY_ID, { coverAssetId: null });
+
+    assert.deepEqual(calls, ['update:{"coverAssetId":null}']);
   });
 });

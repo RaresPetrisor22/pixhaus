@@ -21,6 +21,7 @@ export type Gallery = {
   id: string;
   title: string;
   status: 'draft' | 'active' | 'archived';
+  coverAssetId: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -72,7 +73,7 @@ export type ClientAsset = {
 };
 
 export type ClientGalleryPage = {
-  gallery: { id: string; title: string };
+  gallery: { id: string; title: string; coverUrl: string | null };
   assets: ClientAsset[];
   nextCursor: string | null;
 };
@@ -118,6 +119,8 @@ export const api = {
   get: <T>(path: string, options?: Options) => request<T>('GET', path, options),
   post: <T>(path: string, body?: unknown, options?: Options) =>
     request<T>('POST', path, { ...options, body }),
+  patch: <T>(path: string, body?: unknown, options?: Options) =>
+    request<T>('PATCH', path, { ...options, body }),
   delete: (path: string, options?: Options) => request<void>('DELETE', path, options),
 };
 

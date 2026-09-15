@@ -31,6 +31,7 @@ function build(
     id: GALLERY,
     title: 'g',
     status: 'active',
+    coverAssetId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   },
@@ -154,6 +155,7 @@ describe('UploadsService — rejections', () => {
       id: GALLERY,
       title: 'g',
       status: 'archived',
+      coverAssetId: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });

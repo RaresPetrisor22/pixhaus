@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   ApiError,
@@ -9,6 +9,7 @@ import {
   type SignedUrl,
 } from '../api';
 import { Blurhash } from '../blurhash';
+import { Hero } from '../hero';
 import { badge, bearer, clearBadge } from '../client';
 import { Card, Notice } from '../ui';
 
@@ -16,9 +17,11 @@ type State =
   | { kind: 'loading' }
   | { kind: 'no-badge' }
   | { kind: 'failed'; message: string }
-  | { kind: 'ready'; title: string; assets: ClientAsset[] };
+  | { kind: 'ready'; title: string; coverUrl: string | null; assets: ClientAsset[] };
 
-async function loadAll(token: string): Promise<{ title: string; assets: ClientAsset[] }> {
+type Loaded = { title: string; coverUrl: string | null; assets: ClientAsset[] };
+
+async function loadAll(token: string): Promise<Loaded> {
   const options = { bearer: token };
   const first = await api.get<ClientGalleryPage>('/api/client/gallery?limit=50', options);
   const assets = [...first.assets];
@@ -33,7 +36,7 @@ async function loadAll(token: string): Promise<{ title: string; assets: ClientAs
     cursor = page.nextCursor;
   }
 
-  return { title: first.gallery.title, assets };
+  return { title: first.gallery.title, coverUrl: first.gallery.coverUrl, assets };
 }
 
 export default function ClientGallery() {
@@ -41,6 +44,7 @@ export default function ClientGallery() {
     bearer() ? { kind: 'loading' } : { kind: 'no-badge' },
   );
   const [preview, setPreview] = useState<string | null>(null);
+  const photos = useRef<HTMLDivElement>(null);
   const canDownload = badge()?.rights.includes('download') ?? false;
 
   useEffect(() => {
@@ -101,16 +105,30 @@ export default function ClientGallery() {
   }
 
   return (
-    <section className="mx-auto mt-10 max-w-6xl space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">{state.title}</h1>
+    <section>
+      {state.coverUrl && (
+        <Hero
+          src={state.coverUrl}
+          title={state.title}
+          onView={() => photos.current?.scrollIntoView({ behavior: 'smooth' })}
+        />
+      )}
+
+      <h1
+        className={`text-sm tracking-[0.2em] text-neutral-700 uppercase ${
+          state.coverUrl ? 'py-6' : 'pt-10 pb-6'
+        }`}
+      >
+        {state.title}
+      </h1>
 
       {/* Columns, not a grid: a grid row is as tall as its tallest photo, so
           one portrait shot leaves a hole beside every landscape one. */}
-      <div className="columns-[200px] gap-2">
+      <div ref={photos} className="columns-[420px] gap-3 pb-16">
         {state.assets.map((asset) => (
           <figure
             key={asset.id}
-            className="group relative mb-2 break-inside-avoid overflow-hidden rounded-md bg-neutral-200"
+            className="group relative mb-3 break-inside-avoid overflow-hidden rounded-md bg-neutral-200"
             style={{
               aspectRatio:
                 asset.width && asset.height ? `${asset.width} / ${asset.height}` : '3 / 2',
@@ -144,7 +162,7 @@ export default function ClientGallery() {
       </div>
 
       {state.assets.length === 0 && (
-        <p className="text-sm text-neutral-500">No photos in this gallery yet.</p>
+        <p className="pb-16 text-sm text-neutral-500">No photos in this gallery yet.</p>
       )}
 
       {preview && (

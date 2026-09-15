@@ -94,6 +94,25 @@ export class GalleriesService {
 
     this.must(principal, 'gallery.manage', this.asResource(gallery, principal.studioId));
 
+    // A cover has to be a finished photo from this gallery. The FK would catch
+    // another studio's asset; this catches another gallery's, and one whose
+    // renditions do not exist yet.
+    if (changes.coverAssetId) {
+      const usable = await this.repository.hasReadyAsset(
+        principal.studioId,
+        galleryId,
+        changes.coverAssetId,
+      );
+
+      if (!usable) {
+        throw new ApiException(
+          HttpStatus.NOT_FOUND,
+          'asset_not_found',
+          'Choose a finished photo from this gallery.',
+        );
+      }
+    }
+
     const updated = await this.repository.update(principal.studioId, galleryId, changes);
 
     if (!updated) {

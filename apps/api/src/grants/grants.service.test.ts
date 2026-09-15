@@ -59,6 +59,7 @@ function build(
           id: GALLERY,
           title: 'Ana & Mihai',
           status: 'draft',
+          coverAssetId: null,
           createdAt: new Date(),
           updatedAt: new Date(),
         }
@@ -172,6 +173,7 @@ describe('GrantsService — create', () => {
         id: GALLERY,
         title: 'Old wedding',
         status: 'archived',
+        coverAssetId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       },

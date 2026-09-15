@@ -39,6 +39,7 @@ const gallery: Gallery = {
   id: GALLERY,
   title: 'Ana & Mihai',
   status: 'active',
+  coverAssetId: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };

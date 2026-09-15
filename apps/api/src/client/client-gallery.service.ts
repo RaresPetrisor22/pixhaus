@@ -14,7 +14,7 @@ import type { ClientGalleryInput } from './client.schemas';
 export type SignedUrl = { url: string; expiresAt: Date };
 
 export type ClientGalleryPage = {
-  gallery: { id: string; title: string };
+  gallery: { id: string; title: string; coverUrl: string | null };
   assets: {
     id: string;
     filename: string;
@@ -117,10 +117,42 @@ export class ClientGalleryService {
     );
 
     return {
-      gallery: { id: gallery.id, title: gallery.title },
+      gallery: {
+        id: gallery.id,
+        title: gallery.title,
+        coverUrl: query.cursor
+          ? null
+          : await this.coverUrl(principal, gallery.coverAssetId, page.assets[0]?.id),
+      },
       assets,
       nextCursor: page.nextCursor,
     };
+  }
+
+  /**
+   * The full-bleed image the gallery opens with. Falls back to the first photo
+   * so a gallery looks finished before the photographer has chosen one, and is
+   * skipped on later pages, which reuse the first page's header.
+   */
+  private async coverUrl(
+    principal: GrantPrincipal,
+    chosen: string | null,
+    fallback: string | undefined,
+  ): Promise<string | null> {
+    const assetId = chosen ?? fallback;
+
+    if (!assetId) {
+      return null;
+    }
+
+    const cover = await this.assets.findRendition(
+      principal.studioId,
+      assetId,
+      'preview',
+      principal.galleryId,
+    );
+
+    return this.sign(cover?.storageKey ?? null);
   }
 
   async renditionUrl(

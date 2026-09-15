@@ -8,6 +8,7 @@ export type Gallery = {
   id: string;
   title: string;
   status: GalleryStatus;
+  coverAssetId: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -16,19 +17,21 @@ type GalleryRow = {
   id: string;
   title: string;
   status: GalleryStatus;
+  cover_asset_id: string | null;
   created_at: Date;
   updated_at: Date;
 };
 
 export type GalleryPage = { galleries: Gallery[]; nextCursor: string | null };
 
-const COLUMNS = 'id, title, status, created_at, updated_at';
+const COLUMNS = 'id, title, status, cover_asset_id, created_at, updated_at';
 
 function toGallery(row: GalleryRow): Gallery {
   return {
     id: row.id,
     title: row.title,
     status: row.status,
+    coverAssetId: row.cover_asset_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -98,19 +101,40 @@ export class GalleriesRepository {
   update(
     studioId: string,
     galleryId: string,
-    changes: { title?: string; status?: GalleryStatus },
+    changes: { title?: string; status?: GalleryStatus; coverAssetId?: string | null },
   ): Promise<Gallery | null> {
     return this.db.withTenant(studioId, async (tx) => {
+      // The cover needs a flag of its own: null is a value here (clear the
+      // cover), so COALESCE cannot tell it from "not provided".
       const { rows } = await tx.query<GalleryRow>(
         `UPDATE galleries
             SET title = COALESCE($2, title),
-                status = COALESCE($3, status)
+                status = COALESCE($3, status),
+                cover_asset_id = CASE WHEN $4 THEN $5::uuid ELSE cover_asset_id END
           WHERE id = $1
       RETURNING ${COLUMNS}`,
-        [galleryId, changes.title ?? null, changes.status ?? null],
+        [
+          galleryId,
+          changes.title ?? null,
+          changes.status ?? null,
+          'coverAssetId' in changes,
+          changes.coverAssetId ?? null,
+        ],
       );
 
       return rows[0] ? toGallery(rows[0]) : null;
+    });
+  }
+
+  /** Guards the cover: the FK proves the studio, this proves the gallery. */
+  hasReadyAsset(studioId: string, galleryId: string, assetId: string): Promise<boolean> {
+    return this.db.withTenant(studioId, async (tx) => {
+      const { rows } = await tx.query(
+        `SELECT 1 FROM assets WHERE id = $1 AND gallery_id = $2 AND status = 'ready'`,
+        [assetId, galleryId],
+      );
+
+      return rows.length > 0;
     });
   }
 

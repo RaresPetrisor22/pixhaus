@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { api, describe, type Asset, type Gallery as GalleryRecord, type Page } from '../api';
 import { Blurhash } from '../blurhash';
+import { Hero } from '../hero';
 import { ShareLinks } from '../share-links';
 import { Notice } from '../ui';
 import { uploadFile, type UploadStep } from '../upload';
@@ -35,6 +36,7 @@ export default function Gallery() {
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [preview, setPreview] = useState<Asset | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const photos = useRef<HTMLDivElement>(null);
 
   const refreshAssets = useCallback(
     () =>
@@ -87,6 +89,14 @@ export default function Gallery() {
     setAssets((current) => current.filter((a) => a.id !== asset.id));
   }
 
+  async function setCover(asset: Asset) {
+    try {
+      setGallery(await api.patch(`/api/galleries/${id}`, { coverAssetId: asset.id }));
+    } catch (err) {
+      setError(describe(err));
+    }
+  }
+
   if (error && !gallery) {
     return (
       <section className="mx-auto mt-10 max-w-3xl space-y-4">
@@ -101,66 +111,85 @@ export default function Gallery() {
   if (!gallery) return null;
   const pending = uploads.filter((u) => u.step !== 'done');
 
+  // What the client will see, so the photographer is looking at the real thing
+  // while they choose it. Falls back to the first photo until they do.
+  const coverId = gallery.coverAssetId ?? assets.find((a) => a.status === 'ready')?.id;
+
   return (
-    <section className="mx-auto mt-10 max-w-5xl space-y-6">
-      <div className="flex items-baseline justify-between gap-4">
-        <div>
-          <Link to="/galleries" className="text-sm text-neutral-500 hover:underline">
-            ← Galleries
-          </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">{gallery.title}</h1>
+    <section>
+      {coverId && (
+        <Hero
+          src={`/api/assets/${coverId}/renditions/preview`}
+          title={gallery.title}
+          subtitle={gallery.coverAssetId ? undefined : 'no cover chosen — showing the first photo'}
+          onView={() => photos.current?.scrollIntoView({ behavior: 'smooth' })}
+        />
+      )}
+
+      <div className="space-y-6 pt-8">
+        <div className="flex items-baseline justify-between gap-4">
+          <div>
+            <Link to="/galleries" className="text-sm text-neutral-500 hover:underline">
+              ← Galleries
+            </Link>
+            <h1 className="text-2xl font-semibold tracking-tight">{gallery.title}</h1>
+          </div>
+          <span className="text-xs">
+            <StatusPill status={gallery.status} />
+          </span>
         </div>
-        <span className="text-xs">
-          <StatusPill status={gallery.status} />
-        </span>
-      </div>
 
-      <ShareLinks
-        galleryId={id}
-        onShared={() =>
-          void api
-            .get<GalleryRecord>(`/api/galleries/${id}`)
-            .then(setGallery)
-            .catch(() => undefined)
-        }
-      />
+        <ShareLinks
+          galleryId={id}
+          onShared={() =>
+            void api
+              .get<GalleryRecord>(`/api/galleries/${id}`)
+              .then(setGallery)
+              .catch(() => undefined)
+          }
+        />
 
-      {gallery.status !== 'archived' && (
-        <label className="block cursor-pointer rounded-md border border-dashed border-neutral-300 px-4 py-6 text-center text-sm text-neutral-600 hover:bg-neutral-50">
-          Choose photos to upload
-          <input type="file" multiple accept="image/*" className="hidden" onChange={onFiles} />
-        </label>
-      )}
+        {gallery.status !== 'archived' && (
+          <label className="block cursor-pointer rounded-md border border-dashed border-neutral-300 px-4 py-6 text-center text-sm text-neutral-600 hover:bg-neutral-50">
+            Choose photos to upload
+            <input type="file" multiple accept="image/*" className="hidden" onChange={onFiles} />
+          </label>
+        )}
 
-      {error && <Notice tone="error">{error}</Notice>}
+        {error && <Notice tone="error">{error}</Notice>}
 
-      {pending.length > 0 && (
-        <ul className="space-y-1 text-sm">
-          {pending.map((u, i) => (
-            <li key={i} className="flex justify-between text-neutral-600">
-              <span className="truncate">{u.name}</span>
-              <span className={u.step === 'failed' ? 'text-red-700' : ''}>{u.error ?? u.step}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+        {pending.length > 0 && (
+          <ul className="space-y-1 text-sm">
+            {pending.map((u, i) => (
+              <li key={i} className="flex justify-between text-neutral-600">
+                <span className="truncate">{u.name}</span>
+                <span className={u.step === 'failed' ? 'text-red-700' : ''}>
+                  {u.error ?? u.step}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
 
-      {/* Columns, not a grid: a grid row is as tall as its tallest photo, so
+        {/* Columns, not a grid: a grid row is as tall as its tallest photo, so
           one portrait shot leaves a hole beside every landscape one. */}
-      <div className="columns-[180px] gap-2">
-        {assets.map((asset) => (
-          <Tile
-            key={asset.id}
-            asset={asset}
-            onOpen={() => setPreview(asset)}
-            onRemove={() => void remove(asset)}
-          />
-        ))}
-      </div>
+        <div ref={photos} className="columns-[340px] gap-3 pb-16">
+          {assets.map((asset) => (
+            <Tile
+              key={asset.id}
+              asset={asset}
+              isCover={asset.id === gallery.coverAssetId}
+              onOpen={() => setPreview(asset)}
+              onCover={() => void setCover(asset)}
+              onRemove={() => void remove(asset)}
+            />
+          ))}
+        </div>
 
-      {assets.length === 0 && pending.length === 0 && (
-        <p className="text-sm text-neutral-500">No photos yet.</p>
-      )}
+        {assets.length === 0 && pending.length === 0 && (
+          <p className="pb-16 text-sm text-neutral-500">No photos yet.</p>
+        )}
+      </div>
 
       {preview && (
         // The photographer plane sends the cookie, so the API's 302 to the
@@ -182,18 +211,22 @@ export default function Gallery() {
 
 function Tile({
   asset,
+  isCover,
   onOpen,
+  onCover,
   onRemove,
 }: {
   asset: Asset;
+  isCover: boolean;
   onOpen: () => void;
+  onCover: () => void;
   onRemove: () => void;
 }) {
   const ratio = asset.width && asset.height ? `${asset.width} / ${asset.height}` : '3 / 2';
 
   return (
     <figure
-      className="group relative mb-2 break-inside-avoid overflow-hidden rounded-md bg-neutral-200"
+      className="group relative mb-3 break-inside-avoid overflow-hidden rounded-md bg-neutral-200"
       style={{ aspectRatio: ratio }}
       title={asset.originalFilename}
     >
@@ -222,10 +255,24 @@ function Tile({
         type="button"
         onClick={onRemove}
         aria-label="Delete photo"
-        className="absolute top-1 right-1 hidden h-6 w-6 rounded-full bg-black/60 text-white group-hover:block"
+        className="absolute top-2 right-2 hidden h-7 w-7 rounded-full bg-black/60 text-white group-hover:block"
       >
         ×
       </button>
+      {asset.status === 'ready' && !isCover && (
+        <button
+          type="button"
+          onClick={onCover}
+          className="absolute bottom-2 left-2 hidden rounded bg-black/60 px-2 py-1 text-xs text-white group-hover:block"
+        >
+          Make cover
+        </button>
+      )}
+      {isCover && (
+        <span className="absolute bottom-2 left-2 rounded bg-white/90 px-2 py-1 text-xs font-medium text-neutral-900">
+          Cover
+        </span>
+      )}
     </figure>
   );
 }

@@ -9,9 +9,14 @@ export const CreateGalleryBody = z.object({ title });
 export type CreateGalleryInput = z.infer<typeof CreateGalleryBody>;
 
 export const UpdateGalleryBody = z
-  .object({ title: title.optional(), status: status.optional() })
-  .refine((body) => body.title !== undefined || body.status !== undefined, {
-    message: 'provide title, status, or both',
+  .object({
+    title: title.optional(),
+    status: status.optional(),
+    // Null clears the cover, so nullable and optional mean different things.
+    coverAssetId: z.uuid().nullable().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: 'provide title, status, or coverAssetId',
   });
 
 export type UpdateGalleryInput = z.infer<typeof UpdateGalleryBody>;
