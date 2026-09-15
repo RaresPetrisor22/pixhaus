@@ -20,7 +20,7 @@ Upload photos, send a link, done — your clients never make an account.
 A live instance runs at **[pixhausapp.com](https://pixhausapp.com)**. Registration is invite-only,
 so use the demo studio:
 
-| Sign in as      | `demo@pixhausapp.com` · `<demo passphrase>`                        |
+| Sign in as      | `demo@pixhausapp.com` · `DemoAppPassword22`                        |
 | --------------- | ------------------------------------------------------------------ |
 | Or, as a client | `<share link printed by scripts/seed-demo.sh>` — no account needed |
 
