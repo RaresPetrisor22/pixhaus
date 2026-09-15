@@ -33,6 +33,7 @@ export default function Gallery() {
   const [gallery, setGallery] = useState<GalleryRecord | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [uploads, setUploads] = useState<Upload[]>([]);
+  const [preview, setPreview] = useState<Asset | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refreshAssets = useCallback(
@@ -144,25 +145,55 @@ export default function Gallery() {
         </ul>
       )}
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
+      {/* Columns, not a grid: a grid row is as tall as its tallest photo, so
+          one portrait shot leaves a hole beside every landscape one. */}
+      <div className="columns-[180px] gap-2">
         {assets.map((asset) => (
-          <Tile key={asset.id} asset={asset} onRemove={() => void remove(asset)} />
+          <Tile
+            key={asset.id}
+            asset={asset}
+            onOpen={() => setPreview(asset)}
+            onRemove={() => void remove(asset)}
+          />
         ))}
       </div>
 
       {assets.length === 0 && pending.length === 0 && (
         <p className="text-sm text-neutral-500">No photos yet.</p>
       )}
+
+      {preview && (
+        // The photographer plane sends the cookie, so the API's 302 to the
+        // presigned URL is enough; no fetch first.
+        <div
+          onClick={() => setPreview(null)}
+          className="fixed inset-0 z-10 grid cursor-zoom-out place-items-center bg-black/80 p-4"
+        >
+          <img
+            src={`/api/assets/${preview.id}/renditions/preview`}
+            alt={preview.originalFilename}
+            className="max-h-full max-w-full"
+          />
+        </div>
+      )}
     </section>
   );
 }
 
-function Tile({ asset, onRemove }: { asset: Asset; onRemove: () => void }) {
+function Tile({
+  asset,
+  onOpen,
+  onRemove,
+}: {
+  asset: Asset;
+  onOpen: () => void;
+  onRemove: () => void;
+}) {
   const ratio = asset.width && asset.height ? `${asset.width} / ${asset.height}` : '3 / 2';
 
   return (
     <figure
-      className="group relative overflow-hidden rounded-md bg-neutral-200"
+      className="group relative mb-2 break-inside-avoid overflow-hidden rounded-md bg-neutral-200"
       style={{ aspectRatio: ratio }}
       title={asset.originalFilename}
     >
@@ -174,7 +205,8 @@ function Tile({ asset, onRemove }: { asset: Asset; onRemove: () => void }) {
           src={`/api/assets/${asset.id}/renditions/grid`}
           alt={asset.originalFilename}
           loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover"
+          onClick={onOpen}
+          className="absolute inset-0 h-full w-full cursor-zoom-in object-cover"
         />
       )}
       {asset.status !== 'ready' && (

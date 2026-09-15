@@ -104,11 +104,13 @@ export default function ClientGallery() {
     <section className="mx-auto mt-10 max-w-6xl space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">{state.title}</h1>
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2">
+      {/* Columns, not a grid: a grid row is as tall as its tallest photo, so
+          one portrait shot leaves a hole beside every landscape one. */}
+      <div className="columns-[200px] gap-2">
         {state.assets.map((asset) => (
           <figure
             key={asset.id}
-            className="group relative overflow-hidden rounded-md bg-neutral-200"
+            className="group relative mb-2 break-inside-avoid overflow-hidden rounded-md bg-neutral-200"
             style={{
               aspectRatio:
                 asset.width && asset.height ? `${asset.width} / ${asset.height}` : '3 / 2',
